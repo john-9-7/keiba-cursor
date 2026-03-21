@@ -3,3 +3,5 @@ node_modules/
 *.log
 .DS_Store
 data/keiba-session.txt
+data/keiba-session-live.txt
+data/keiba-session-archive.txt

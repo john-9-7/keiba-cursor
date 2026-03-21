@@ -78,7 +78,8 @@
    - `ENABLE_AUTH=true`
    - `AUTH_USER=あなた専用ID`
    - `AUTH_PASS=長く強いパスワード`
-   - （任意・iPhoneで毎回Cookieを貼りたくない場合）`KEIBA_COOKIE` … PCでコピーした `laravel_session=...; XSRF-TOKEN=...` を1行で貼り付け
+   - （任意・iPhoneで毎回Cookieを貼りたくない場合）`KEIBA_COOKIE` … **今日・リアルタイム用**のセッションを1行で貼り付け
+   - （任意）`KEIBA_COOKIE_ARCHIVE` … **過去開催・DB取り込み用**の別セッション。画面の「過去・DB用」と対応
 6. Deploy 実行
 7. 発行された `https://...onrender.com` にアクセスし、ID/パスワードでログインできることを確認
 

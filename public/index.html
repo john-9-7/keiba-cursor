@@ -56,18 +56,42 @@
     <textarea id="cookie" placeholder="開発者ツールなどでコピーした Cookie をそのまま貼り付けてください"></textarea>
     <p class="hint">値だけ貼っても <code>laravel_session=</code> を補完します。2行で貼ると 1行目＝laravel_session、2行目＝XSRF-TOKEN として扱います。F12 → アプリケーション → Cookie で各「値」をコピーして貼り付けてください。</p>
 
+    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#fafafa">
+      <legend style="font-size:0.8rem;color:#64748b;font-weight:600">「サーバーに保存」するときの用途</legend>
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeSave" value="live" checked style="width:auto">
+        <span><strong>今日・リアルタイム</strong>で追う用</span>
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeSave" value="archive" style="width:auto">
+        <span><strong>過去開催・DB取り込み</strong>用</span>
+      </label>
+    </fieldset>
+
     <p style="margin-bottom:10px">
       <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
         <input type="checkbox" id="useSavedSession" style="width:auto">
-        <span><strong>保存済みの Cookie を使う</strong>（iPhoneはここにチェック）</span>
+        <span><strong>保存済みの Cookie を使う</strong>（Cookie欄は空でOK・iPhone向け）</span>
       </label>
     </p>
-    <p id="sessionStatus" class="hint" style="margin-bottom:8px">セッション状態を確認中...</p>
+    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#f8fafc">
+      <legend style="font-size:0.8rem;color:#64748b;font-weight:600">取得APIで使う保存済み</legend>
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeUse" value="live" checked style="width:auto">
+        <span>今日・リアルタイム用</span>
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeUse" value="archive" style="width:auto">
+        <span>過去・DB用</span>
+      </label>
+    </fieldset>
+    <p id="sessionStatus" class="hint" style="margin-bottom:8px;line-height:1.5">セッション状態を確認中...</p>
     <p style="margin-bottom:16px">
       <button type="button" id="btnSaveSession">サーバーに Cookie を保存</button>
-      <button type="button" id="btnClearSession" class="btn-secondary">サーバー保存を削除</button>
+      <button type="button" id="btnClearSessionLive" class="btn-secondary">今日用の保存を削除</button>
+      <button type="button" id="btnClearSessionArchive" class="btn-secondary">過去・DB用の保存を削除</button>
     </p>
-    <p class="hint" style="margin-bottom:16px;background:#eff6ff;padding:8px 10px;border-radius:6px;color:#1e40af">初回だけPCで Cookie を貼って「サーバーに保存」。以後は iPhone でチェックを入れたまま、<strong>Cookie欄は空</strong>で取得できます。Render では再デプロイで消えるため、環境変数 <code>KEIBA_COOKIE</code> も併用推奨です。</p>
+    <p class="hint" style="margin-bottom:16px;background:#eff6ff;padding:8px 10px;border-radius:6px;color:#1e40af">用途を分けると、<strong>当日の追跡用セッション</strong>と<strong>別日・過去カード用のセッション</strong>を同時にサーバーに置けます。Render ではファイルが消えるため、今日用は <code>KEIBA_COOKIE</code>、過去用は <code>KEIBA_COOKIE_ARCHIVE</code> の併用を推奨します。</p>
 
     <section class="race-list-section" id="dashboardTop" style="margin-bottom: 24px;">
       <h2 style="font-size: 1rem; margin-bottom: 8px;">いまの注目レース（全会場・自動）</h2>
@@ -121,12 +145,32 @@
     const useSavedSessionEl = document.getElementById('useSavedSession');
     const sessionStatusEl = document.getElementById('sessionStatus');
     const btnSaveSession = document.getElementById('btnSaveSession');
-    const btnClearSession = document.getElementById('btnClearSession');
+    const btnClearSessionLive = document.getElementById('btnClearSessionLive');
+    const btnClearSessionArchive = document.getElementById('btnClearSessionArchive');
 
     // レース一覧フロー: 日付・会場のリスト（レース一覧取得後にセット）
     let dateVenueItems = [];
     let currentRaces = [];
-    let sessionHasSaved = false;
+    let sessionLiveOk = false;
+    let sessionArchiveOk = false;
+
+    function getCookiePurposeUse() {
+      var el = document.querySelector('input[name="cookiePurposeUse"]:checked');
+      return el && el.value === 'archive' ? 'archive' : 'live';
+    }
+
+    function getCookiePurposeSave() {
+      var el = document.querySelector('input[name="cookiePurposeSave"]:checked');
+      return el && el.value === 'archive' ? 'archive' : 'live';
+    }
+
+    /** 取得系API共通: 空Cookie＋用途でサーバー保存を参照 */
+    function cookieRequestBase() {
+      return {
+        cookie: effectiveCookieForRequest(),
+        cookiePurpose: getCookiePurposeUse(),
+      };
+    }
 
     /** API の judgment をHTML化 */
     function formatJudgmentHtml(j) {
@@ -157,18 +201,34 @@
       try {
         const res = await fetch('/api/keiba-session/status', { credentials: 'include' });
         const data = await res.json();
-        sessionHasSaved = !!(data && data.hasSaved);
-        if (data && data.hasSaved) {
-          var parts = [];
-          if (data.hasEnv) parts.push('環境変数 KEIBA_COOKIE');
-          if (data.hasFile) parts.push('サーバー保存ファイル');
-          sessionStatusEl.textContent = '利用可能: ' + parts.join(' ＋ ') + ' があります。';
-          if (!useSavedSessionEl.dataset.userToggled) {
+        sessionLiveOk = !!(data && data.hasSavedLive);
+        sessionArchiveOk = !!(data && data.hasSavedArchive);
+        if (data) {
+          var lineLive = '・<strong>今日・リアルタイム用</strong>: ';
+          if (data.hasSavedLive) {
+            var lp = [];
+            if (data.hasEnv) lp.push('環境変数 KEIBA_COOKIE');
+            if (data.hasFileLive) lp.push('サーバー保存');
+            lineLive += 'あり（' + lp.join('＋') + '）';
+          } else {
+            lineLive += '<span style="color:#94a3b8">なし</span>';
+          }
+          var lineArc = '・<strong>過去・DB用</strong>: ';
+          if (data.hasSavedArchive) {
+            var ap = [];
+            if (data.hasEnvArchive) ap.push('環境変数 KEIBA_COOKIE_ARCHIVE');
+            if (data.hasFileArchive) ap.push('サーバー保存');
+            lineArc += 'あり（' + ap.join('＋') + '）';
+          } else {
+            lineArc += '<span style="color:#94a3b8">なし</span>';
+          }
+          sessionStatusEl.innerHTML = lineLive + '<br>' + lineArc;
+          if (!useSavedSessionEl.dataset.userToggled && (sessionLiveOk || sessionArchiveOk)) {
             useSavedSessionEl.checked = true;
           }
-        } else {
-          sessionStatusEl.textContent = 'サーバーに保存された Cookie はありません。PCで一度貼り付けて「サーバーに保存」するか、KEIBA_COOKIE を設定してください。';
-          useSavedSessionEl.checked = false;
+          if (!sessionLiveOk && !sessionArchiveOk) {
+            useSavedSessionEl.checked = false;
+          }
         }
       } catch (e) {
         sessionStatusEl.textContent = 'セッション状態を取得できませんでした。';
@@ -177,6 +237,12 @@
 
     useSavedSessionEl.addEventListener('change', function () {
       useSavedSessionEl.dataset.userToggled = '1';
+    });
+
+    document.querySelectorAll('input[name="cookiePurposeUse"]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        refreshSessionStatus();
+      });
     });
 
     function effectiveCookieForRequest() {
@@ -188,8 +254,13 @@
 
     function requireCookieOrSaved() {
       if (useSavedSessionEl.checked) {
-        if (!sessionHasSaved) {
-          return '「保存済みの Cookie を使う」にチェックしていますが、サーバー側に Cookie がありません。PCで Cookie を貼って「サーバーに保存」するか、Render の KEIBA_COOKIE を設定してください。';
+        var p = getCookiePurposeUse();
+        if (p === 'archive') {
+          if (!sessionArchiveOk) {
+            return '「過去・DB用」を選んでいますが、その保存（または KEIBA_COOKIE_ARCHIVE）がありません。用途を合わせて保存するか、ラジオを「今日・リアルタイム用」に切り替えてください。';
+          }
+        } else if (!sessionLiveOk) {
+          return '「今日・リアルタイム用」を選んでいますが、その保存（または KEIBA_COOKIE）がありません。PCで Cookie を貼って保存するか、用途ラジオを切り替えてください。';
         }
         return null;
       }
@@ -210,12 +281,12 @@
         var res = await fetch('/api/keiba-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cookie: c }),
+          body: JSON.stringify({ cookie: c, cookiePurpose: getCookiePurposeSave() }),
           credentials: 'include',
         });
         var data = await res.json();
         if (data.ok) {
-          alert('保存しました。iPhoneでは「保存済みの Cookie を使う」にチェックし、Cookie欄は空でOKです。');
+          alert(data.message || '保存しました。取得時は「保存済みのどちらを使うか」で用途を選んでください。');
           await refreshSessionStatus();
         } else {
           alert(data.error || '保存に失敗しました。');
@@ -227,23 +298,32 @@
       }
     });
 
-    btnClearSession.addEventListener('click', async function () {
-      if (!confirm('サーバーに保存した Cookie を削除しますか？')) return;
-      btnClearSession.disabled = true;
-      try {
-        var res = await fetch('/api/keiba-session', { method: 'DELETE', credentials: 'include' });
-        var data = await res.json();
-        if (data.ok) {
-          await refreshSessionStatus();
-        } else {
-          alert(data.error || '削除に失敗しました。');
+    function bindClearSession(btn, purpose, label) {
+      btn.addEventListener('click', async function () {
+        if (!confirm('サーバー上の「' + label + '」Cookie ファイルを削除しますか？（環境変数は消えません）')) return;
+        btn.disabled = true;
+        try {
+          var res = await fetch('/api/keiba-session', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookiePurpose: purpose }),
+            credentials: 'include',
+          });
+          var data = await res.json();
+          if (data.ok) {
+            await refreshSessionStatus();
+          } else {
+            alert(data.error || '削除に失敗しました。');
+          }
+        } catch (e) {
+          alert('通信エラー: ' + e.message);
+        } finally {
+          btn.disabled = false;
         }
-      } catch (e) {
-        alert('通信エラー: ' + e.message);
-      } finally {
-        btnClearSession.disabled = false;
-      }
-    });
+      });
+    }
+    bindClearSession(btnClearSessionLive, 'live', '今日・リアルタイム用');
+    bindClearSession(btnClearSessionArchive, 'archive', '過去・DB用');
 
     refreshSessionStatus();
 
@@ -323,7 +403,6 @@
         dashboardCards.innerHTML = '';
         return;
       }
-      const cookie = effectiveCookieForRequest();
       btnDashboard.disabled = true;
       btnDashboardRefresh.disabled = true;
       dashboardStatus.innerHTML =
@@ -332,7 +411,7 @@
       fetch('/api/dashboard', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie }),
+        body: JSON.stringify(cookieRequestBase()),
         credentials: 'include',
       })
         .then(function (r) {
@@ -361,7 +440,6 @@
         raceListResult.innerHTML = '<p class="result error">' + escapeHtml(err) + '</p>';
         return;
       }
-      const cookie = effectiveCookieForRequest();
       btnRaceList.disabled = true;
       raceListResult.innerHTML = '<p>取得中...</p>';
       raceListRaces.innerHTML = '';
@@ -369,7 +447,7 @@
         const res = await fetch('/api/race-list', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cookie }),
+          body: JSON.stringify(cookieRequestBase()),
           credentials: 'include',
         });
         const data = await res.json();
@@ -404,12 +482,13 @@
         raceListRaces.innerHTML = '<p class="result error">' + escapeHtml(err2) + '</p>';
         return;
       }
-      const cookie = effectiveCookieForRequest();
       raceListRaces.innerHTML = '<p>レース一覧を取得中…（RPTは詳細ページから補完するため、レース数に応じて<strong>20〜40秒ほど</strong>かかることがあります）</p>';
       fetch('/api/race-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie, date: item.date, venue: item.venue }),
+        body: JSON.stringify(
+          Object.assign({}, cookieRequestBase(), { date: item.date, venue: item.venue }),
+        ),
         credentials: 'include',
       })
         .then(function (r) { return r.json(); })
@@ -441,13 +520,12 @@
         showResult(false, err);
         return;
       }
-      const cookie = effectiveCookieForRequest();
       resultEl.innerHTML = '<p>詳細取得中...</p>';
       resultEl.className = 'result';
       fetch('/api/fetch-race', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cookie, raceId }),
+        body: JSON.stringify(Object.assign({}, cookieRequestBase(), { raceId: raceId })),
         credentials: 'include',
       })
         .then(function (r) { return r.text().then(function (text) { return { status: r.status, text: text }; }); })
@@ -490,7 +568,6 @@
         showResult(false, err);
         return;
       }
-      const cookie = effectiveCookieForRequest();
       const url = urlEl.value.trim();
       const useBrowser = document.getElementById('useBrowser').checked;
       if (!url) {
@@ -515,7 +592,7 @@
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cookie, url }),
+          body: JSON.stringify(Object.assign({}, cookieRequestBase(), { url: url })),
           credentials: 'include',
         });
         const text = await res.text();

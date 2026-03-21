@@ -14,6 +14,7 @@ const {
   saveKeibaSession,
   clearKeibaSession,
   getKeibaSessionStatus,
+  normalizePurpose,
 } = require('./lib/keibaSession');
 const { enrichMissingRptFromAnalyzePages } = require('./lib/enrichRaceListRpt');
 const { pickDashboardRacesFromListHtml } = require('./lib/dashboardPicks');
@@ -105,24 +106,26 @@ app.get('/api/keiba-session/status', (req, res) => {
 
 /**
  * POST /api/keiba-session
- * Body: { "cookie": "laravel_session=...; XSRF-TOKEN=..." }
- * PCで一度貼り付けて保存。以後 iPhone では Cookie 欄を空にして「保存済みを使う」でOK。
+ * Body: { "cookie": "...", "cookiePurpose": "live" | "archive" }
+ * live=今日リアルタイム用、archive=過去・DB取り込み用
  */
 app.post('/api/keiba-session', (req, res) => {
-  const { cookie } = req.body || {};
-  const result = saveKeibaSession(cookie);
+  const { cookie, cookiePurpose } = req.body || {};
+  const result = saveKeibaSession(cookie, normalizePurpose(cookiePurpose));
   if (!result.ok) {
     return res.status(400).json({ ok: false, error: result.error });
   }
-  res.json({ ok: true, message: 'サーバーに保存しました。' });
+  const label = normalizePurpose(cookiePurpose) === 'archive' ? '過去・DB用' : '今日リアルタイム用';
+  res.json({ ok: true, message: `サーバーに保存しました（${label}）。` });
 });
 
 /**
  * DELETE /api/keiba-session
- * サーバー保存ファイルを削除（環境変数 KEIBA_COOKIE は削除できない）
+ * Body: { "cookiePurpose": "live" | "archive" } — 該当スロットのファイルのみ削除（環境変数は削除不可）
  */
 app.delete('/api/keiba-session', (req, res) => {
-  const result = clearKeibaSession();
+  const { cookiePurpose } = req.body || {};
+  const result = clearKeibaSession(normalizePurpose(cookiePurpose));
   if (!result.ok) {
     return res.status(500).json({ ok: false, error: result.error });
   }
@@ -177,7 +180,7 @@ app.post('/api/fetch', async (req, res) => {
     });
   }
 
-  const cookieStr = resolveKeibaCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie, req.body?.cookiePurpose);
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -260,7 +263,7 @@ const RACE_LIST_URL = 'https://web.keibacluster.com/top/race-list';
  */
 app.post('/api/race-list', async (req, res) => {
   const { cookie, date, venue } = req.body || {};
-  const cookieStr = resolveKeibaCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie, req.body?.cookiePurpose);
 
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -317,7 +320,7 @@ app.post('/api/race-list', async (req, res) => {
  */
 app.post('/api/dashboard', async (req, res) => {
   const { cookie } = req.body || {};
-  const cookieStr = resolveKeibaCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie, req.body?.cookiePurpose);
   try {
     if (!cookieStr) {
       return res.status(400).json({
@@ -466,7 +469,7 @@ app.post('/api/fetch-race', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'raceId を指定してください。' });
   }
   const url = `https://web.keibacluster.com/top/race-analyze?race_id=${id}`;
-  const cookieStr = resolveKeibaCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie, req.body?.cookiePurpose);
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -539,7 +542,7 @@ app.post('/api/fetch-browser', async (req, res) => {
     });
   }
 
-  const cookieStr = resolveKeibaCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie, req.body?.cookiePurpose);
   try {
     if (!cookieStr) {
       return res.status(400).json({
