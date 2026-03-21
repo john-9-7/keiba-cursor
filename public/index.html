@@ -248,7 +248,7 @@
         return;
       }
       const cookie = effectiveCookieForRequest();
-      raceListRaces.innerHTML = '<p>レース一覧を取得中...</p>';
+      raceListRaces.innerHTML = '<p>レース一覧を取得中…（RPTは詳細ページから補完するため、レース数に応じて<strong>20〜40秒ほど</strong>かかることがあります）</p>';
       fetch('/api/race-list', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

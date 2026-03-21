@@ -15,6 +15,7 @@ const {
   clearKeibaSession,
   getKeibaSessionStatus,
 } = require('./lib/keibaSession');
+const { enrichMissingRptFromAnalyzePages } = require('./lib/enrichRaceListRpt');
 let fetchWithBrowser;
 try {
   fetchWithBrowser = require('./lib/fetchWithBrowser').fetchWithBrowser;
@@ -269,6 +270,8 @@ app.post('/api/race-list', async (req, res) => {
       if (!parsed.ok) {
         return res.status(200).json({ ok: false, error: parsed.error || 'パースに失敗しました。' });
       }
+      // 一覧ページの JSON/DOM だけでは RPT が空のことがある → 詳細ページと同じ HTML から補完
+      await enrichMissingRptFromAnalyzePages(parsed.races, cookieStr, 4);
       return res.json({ ok: true, races: parsed.races });
     }
     const list = listDatesAndVenues(html);
