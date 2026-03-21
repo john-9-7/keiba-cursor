@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>今日のレース · 競馬予想ツール</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
+    .container { max-width: 640px; margin: 0 auto; }
+    .dashboard-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .dashboard-card h3 { margin: 0 0 6px 0; font-size: 1.05rem; color: #1e293b; }
+    .horse-mini-wrap { margin-top: 10px; max-height: 220px; overflow: auto; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .horse-mini-wrap .parsed-table { margin-top: 0; font-size: 12px; }
+    .horse-mini-wrap .parsed-table th, .horse-mini-wrap .parsed-table td { padding: 6px 8px; }
+    details.race-legacy { margin-top: 16px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+    details.race-legacy summary { cursor: pointer; font-weight: 600; color: #475569; }
+    .btn-open-bottom { background: #64748b; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; margin-top: 6px; }
+    .btn-open-bottom:hover { background: #475569; }
+    h1 { font-size: 1.25rem; margin-bottom: 16px; color: #333; }
+    label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 4px; color: #555; }
+    textarea, input[type="url"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    textarea { min-height: 100px; resize: vertical; }
+    input[type="url"] { margin-bottom: 12px; }
+    .hint { font-size: 0.75rem; color: #888; margin-top: 4px; margin-bottom: 12px; }
+    button { background: #2563eb; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    button.btn-secondary { background: #64748b; margin-left: 8px; }
+    button.btn-secondary:hover { background: #475569; }
+    .result { margin-top: 20px; padding: 12px; border-radius: 6px; font-size: 14px; }
+    .result.success { background: #dcfce7; color: #166534; }
+    .result.error { background: #fee2e2; color: #991b1b; }
+    .result pre { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    .meta { font-size: 0.875rem; color: #64748b; margin-top: 8px; }
+    .parsed-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .parsed-table th, .parsed-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    .parsed-table th { background: #f1f5f9; font-weight: 600; }
+    .parsed-table td.num { text-align: right; }
+    .rpt-badge { display: inline-block; background: #2563eb; color: #fff; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+    .judgment-block { margin-top: 16px; padding: 12px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; }
+    .judgment-block.judgment-buy { border-color: #86efac; background: #f0fdf4; }
+    .judgment-block.judgment-skip { border-color: #fecaca; background: #fef2f2; }
+    .judgment-verdict { font-size: 1rem; margin: 0 0 8px 0; }
+    .judgment-verdict .pattern { font-weight: 500; color: #64748b; margin-left: 8px; font-size: 0.875rem; }
+    .judgment-recommend { font-size: 0.875rem; margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 6px; line-height: 1.5; }
+    .judgment-lines { margin: 8px 0 0 0; padding: 10px; background: #1e293b; color: #e2e8f0; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav style="margin-bottom:14px;padding:10px 0;border-bottom:1px solid #e5e7eb;display:flex;gap:12px;flex-wrap:wrap;align-items:center;font-size:0.875rem">
+      <a href="/" style="color:#2563eb;text-decoration:none;font-weight:600">← トップに戻る</a>
+      <span style="color:#cbd5e1">|</span>
+      <a href="/analyze.html" style="color:#64748b;text-decoration:none">分析・データ蓄積</a>
+    </nav>
+    <h1>今日のレース（リアルタイム）</h1>
+    <p style="font-size: 0.875rem; color: #666; margin-bottom: 12px;">当日のオッズ・判定を追う画面です。Cookie を入れたあと <strong>「データ取得」</strong>で、会場ごとに今に近い発走のレースをまとめて表示します。<strong>保存・取得のラジオは「今日・リアルタイム用」</strong>がおすすめです。</p>
+
+    <label for="cookie">Cookie</label>
+    <textarea id="cookie" placeholder="開発者ツールなどでコピーした Cookie をそのまま貼り付けてください"></textarea>
+    <p class="hint">値だけ貼っても <code>laravel_session=</code> を補完します。2行で貼ると 1行目＝laravel_session、2行目＝XSRF-TOKEN として扱います。F12 → アプリケーション → Cookie で各「値」をコピーして貼り付けてください。</p>
+
+    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#fafafa">
+      <legend style="font-size:0.8rem;color:#64748b;font-weight:600">「サーバーに保存」するときの用途</legend>
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeSave" value="live" checked style="width:auto">
+        <span><strong>今日・リアルタイム</strong>で追う用</span>
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeSave" value="archive" style="width:auto">
+        <span><strong>過去開催・DB取り込み</strong>用</span>
+      </label>
+    </fieldset>
+
+    <p style="margin-bottom:10px">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="useSavedSession" style="width:auto">
+        <span><strong>保存済みの Cookie を使う</strong>（Cookie欄は空でOK・iPhone向け）</span>
+      </label>
+    </p>
+    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#f8fafc">
+      <legend style="font-size:0.8rem;color:#64748b;font-weight:600">取得APIで使う保存済み</legend>
+      <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeUse" value="live" checked style="width:auto">
+        <span>今日・リアルタイム用</span>
+      </label>
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+        <input type="radio" name="cookiePurposeUse" value="archive" style="width:auto">
+        <span>過去・DB用</span>
+      </label>
+    </fieldset>
+    <p id="sessionStatus" class="hint" style="margin-bottom:8px;line-height:1.5">セッション状態を確認中...</p>
+    <p style="margin-bottom:16px">
+      <button type="button" id="btnSaveSession">サーバーに Cookie を保存</button>
+      <button type="button" id="btnClearSessionLive" class="btn-secondary">今日用の保存を削除</button>
+      <button type="button" id="btnClearSessionArchive" class="btn-secondary">過去・DB用の保存を削除</button>
+    </p>
+    <p class="hint" style="margin-bottom:16px;background:#eff6ff;padding:8px 10px;border-radius:6px;color:#1e40af">用途を分けると、<strong>当日の追跡用セッション</strong>と<strong>別日・過去カード用のセッション</strong>を同時にサーバーに置けます。Render ではファイルが消えるため、今日用は <code>KEIBA_COOKIE</code>、過去用は <code>KEIBA_COOKIE_ARCHIVE</code> の併用を推奨します。</p>
+
+    <section class="race-list-section" id="dashboardTop" style="margin-bottom: 24px;">
+      <h2 style="font-size: 1rem; margin-bottom: 8px;">いまの注目レース（全会場・自動）</h2>
+      <p class="hint" style="margin-bottom: 10px;">開催日は <strong>JST の今日</strong>を優先し、無ければ直近の開催日を使います。各会場について、<strong>今の時刻に最も近い発走</strong>の1レースだけを選び、オッズ付きで買い／見送りを表示します。</p>
+      <p style="margin-bottom: 10px;">
+        <button type="button" id="btnDashboard">データ取得</button>
+        <button type="button" id="btnDashboardRefresh" class="btn-secondary">更新</button>
+      </p>
+      <div id="dashboardStatus" style="margin-top: 8px;"></div>
+      <div id="dashboardCards" style="margin-top: 12px;"></div>
+
+      <details class="race-legacy">
+        <summary>従来どおり：日付・会場を選んでレース一覧</summary>
+        <p class="hint" style="margin-top: 10px;">一覧だけ見たい・別レースの詳細を取りたいとき用です。</p>
+        <button type="button" id="btnRaceList" style="margin-top: 8px;">レース一覧を取得</button>
+        <div id="raceListResult" style="margin-top: 12px;"></div>
+        <div id="raceListRaces" style="margin-top: 12px;"></div>
+      </details>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+    <h2 style="font-size: 1rem; margin-bottom: 8px;">URLを指定して取得（従来の方法）</h2>
+    <label for="url">データページのURL</label>
+    <input type="url" id="url" placeholder="https://web.keibacluster.com/top/race-analyze?race_id=361645">
+    <p class="hint">必ず <code>?race_id=数字</code> が含まれるURLにしてください。出馬表を表示した状態で、レースを<strong>右クリック→「新しいタブで開く」</strong>または<strong>中ボタン（ホイール）クリック</strong>で開くと、アドレスバーに race_id 付きのURLが出ます。それをコピーしてください。</p>
+
+    <p style="margin-bottom:8px">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="useBrowser" style="width:auto">
+        <span>ブラウザで取得</span>
+      </label>
+      <span class="hint" style="display:inline;margin-left:4px">（Cookie が効かずトップが返るときに使用）</span>
+    </p>
+    <button type="button" id="btnFetch">取得</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const cookieEl = document.getElementById('cookie');
+    const urlEl = document.getElementById('url');
+    const btnFetch = document.getElementById('btnFetch');
+    const resultEl = document.getElementById('result');
+    const btnRaceList = document.getElementById('btnRaceList');
+    const btnDashboard = document.getElementById('btnDashboard');
+    const btnDashboardRefresh = document.getElementById('btnDashboardRefresh');
+    const dashboardStatus = document.getElementById('dashboardStatus');
+    const dashboardCards = document.getElementById('dashboardCards');
+    const raceListResult = document.getElementById('raceListResult');
+    const raceListRaces = document.getElementById('raceListRaces');
+    const useSavedSessionEl = document.getElementById('useSavedSession');
+    const sessionStatusEl = document.getElementById('sessionStatus');
+    const btnSaveSession = document.getElementById('btnSaveSession');
+    const btnClearSessionLive = document.getElementById('btnClearSessionLive');
+    const btnClearSessionArchive = document.getElementById('btnClearSessionArchive');
+
+    // レース一覧フロー: 日付・会場のリスト（レース一覧取得後にセット）
+    let dateVenueItems = [];
+    let currentRaces = [];
+    let sessionLiveOk = false;
+    let sessionArchiveOk = false;
+
+    function getCookiePurposeUse() {
+      var el = document.querySelector('input[name="cookiePurposeUse"]:checked');
+      return el && el.value === 'archive' ? 'archive' : 'live';
+    }
+
+    function getCookiePurposeSave() {
+      var el = document.querySelector('input[name="cookiePurposeSave"]:checked');
+      return el && el.value === 'archive' ? 'archive' : 'live';
+    }
+
+    /** 取得系API共通: 空Cookie＋用途でサーバー保存を参照 */
+    function cookieRequestBase() {
+      return {
+        cookie: effectiveCookieForRequest(),
+        cookiePurpose: getCookiePurposeUse(),
+      };
+    }
+
+    /** API の judgment をHTML化 */
+    function formatJudgmentHtml(j) {
+      if (!j) return '';
+      var cls = j.verdict === '買い' ? 'judgment-buy' : 'judgment-skip';
+      var html = '<div class="judgment-block ' + cls + '">';
+      html += '<p class="judgment-verdict"><strong>' + escapeHtml(j.verdict || '') + '</strong>';
+      if (j.pattern) html += '<span class="pattern">パターン ' + escapeHtml(String(j.pattern)) + '</span>';
+      html += '</p>';
+      if (j.recommend) {
+        html += '<p class="judgment-recommend"><strong>推奨券種</strong><br>' + escapeHtml(j.recommend) + '</p>';
+      }
+      if (j.lines && j.lines.length) {
+        html += '<pre class="judgment-lines">' + escapeHtml(j.lines.join('\n')) + '</pre>';
+      }
+      html += '</div>';
+      return html;
+    }
+
+    function showResult(ok, message, detail) {
+      resultEl.className = 'result ' + (ok ? 'success' : 'error');
+      let html = '<p>' + message + '</p>';
+      if (detail) html += detail;
+      resultEl.innerHTML = html;
+    }
+
+    async function refreshSessionStatus() {
+      try {
+        const res = await fetch('/api/keiba-session/status', { credentials: 'include' });
+        const data = await res.json();
+        sessionLiveOk = !!(data && data.hasSavedLive);
+        sessionArchiveOk = !!(data && data.hasSavedArchive);
+        if (data) {
+          var lineLive = '・<strong>今日・リアルタイム用</strong>: ';
+          if (data.hasSavedLive) {
+            var lp = [];
+            if (data.hasEnv) lp.push('環境変数 KEIBA_COOKIE');
+            if (data.hasFileLive) lp.push('サーバー保存');
+            lineLive += 'あり（' + lp.join('＋') + '）';
+          } else {
+            lineLive += '<span style="color:#94a3b8">なし</span>';
+          }
+          var lineArc = '・<strong>過去・DB用</strong>: ';
+          if (data.hasSavedArchive) {
+            var ap = [];
+            if (data.hasEnvArchive) ap.push('環境変数 KEIBA_COOKIE_ARCHIVE');
+            if (data.hasFileArchive) ap.push('サーバー保存');
+            lineArc += 'あり（' + ap.join('＋') + '）';
+          } else {
+            lineArc += '<span style="color:#94a3b8">なし</span>';
+          }
+          sessionStatusEl.innerHTML = lineLive + '<br>' + lineArc;
+          if (!useSavedSessionEl.dataset.userToggled && (sessionLiveOk || sessionArchiveOk)) {
+            useSavedSessionEl.checked = true;
+          }
+          if (!sessionLiveOk && !sessionArchiveOk) {
+            useSavedSessionEl.checked = false;
+          }
+        }
+      } catch (e) {
+        sessionStatusEl.textContent = 'セッション状態を取得できませんでした。';
+      }
+    }
+
+    useSavedSessionEl.addEventListener('change', function () {
+      useSavedSessionEl.dataset.userToggled = '1';
+    });
+
+    document.querySelectorAll('input[name="cookiePurposeUse"]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        refreshSessionStatus();
+      });
+    });
+
+    function effectiveCookieForRequest() {
+      if (useSavedSessionEl.checked) {
+        return '';
+      }
+      return cookieEl.value.trim();
+    }
+
+    function requireCookieOrSaved() {
+      if (useSavedSessionEl.checked) {
+        var p = getCookiePurposeUse();
+        if (p === 'archive') {
+          if (!sessionArchiveOk) {
+            return '「過去・DB用」を選んでいますが、その保存（または KEIBA_COOKIE_ARCHIVE）がありません。用途を合わせて保存するか、ラジオを「今日・リアルタイム用」に切り替えてください。';
+          }
+        } else if (!sessionLiveOk) {
+          return '「今日・リアルタイム用」を選んでいますが、その保存（または KEIBA_COOKIE）がありません。PCで Cookie を貼って保存するか、用途ラジオを切り替えてください。';
+        }
+        return null;
+      }
+      if (!cookieEl.value.trim()) {
+        return 'Cookie を入力するか、「保存済みの Cookie を使う」にチェックしてください。';
+      }
+      return null;
+    }
+
+    btnSaveSession.addEventListener('click', async function () {
+      var c = cookieEl.value.trim();
+      if (!c) {
+        alert('先に Cookie を貼り付けてください。');
+        return;
+      }
+      btnSaveSession.disabled = true;
+      try {
+        var res = await fetch('/api/keiba-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie: c, cookiePurpose: getCookiePurposeSave() }),
+          credentials: 'include',
+        });
+        var data = await res.json();
+        if (data.ok) {
+          alert(data.message || '保存しました。取得時は「保存済みのどちらを使うか」で用途を選んでください。');
+          await refreshSessionStatus();
+        } else {
+          alert(data.error || '保存に失敗しました。');
+        }
+      } catch (e) {
+        alert('通信エラー: ' + e.message);
+      } finally {
+        btnSaveSession.disabled = false;
+      }
+    });
+
+    function bindClearSession(btn, purpose, label) {
+      btn.addEventListener('click', async function () {
+        if (!confirm('サーバー上の「' + label + '」Cookie ファイルを削除しますか？（環境変数は消えません）')) return;
+        btn.disabled = true;
+        try {
+          var res = await fetch('/api/keiba-session', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookiePurpose: purpose }),
+            credentials: 'include',
+          });
+          var data = await res.json();
+          if (data.ok) {
+            await refreshSessionStatus();
+          } else {
+            alert(data.error || '削除に失敗しました。');
+          }
+        } catch (e) {
+          alert('通信エラー: ' + e.message);
+        } finally {
+          btn.disabled = false;
+        }
+      });
+    }
+    bindClearSession(btnClearSessionLive, 'live', '今日・リアルタイム用');
+    bindClearSession(btnClearSessionArchive, 'archive', '過去・DB用');
+
+    (function initFromQuery() {
+      var q = new URLSearchParams(window.location.search).get('purpose');
+      if (q === 'archive') {
+        var u = document.querySelector('input[name="cookiePurposeUse"][value="archive"]');
+        if (u) u.checked = true;
+        var s = document.querySelector('input[name="cookiePurposeSave"][value="archive"]');
+        if (s) s.checked = true;
+      }
+      refreshSessionStatus();
+    })();
+
+    function renderDashboardResponse(data) {
+      if (!data.ok) {
+        dashboardStatus.innerHTML =
+          '<p class="result error">' + escapeHtml(data.error || '取得に失敗しました。') + '</p>' +
+          (data.hint ? '<p class="meta">' + escapeHtml(data.hint) + '</p>' : '');
+        dashboardCards.innerHTML = '';
+        return;
+      }
+      var jst = '';
+      try {
+        jst = new Date(data.generatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+      } catch (e1) {
+        jst = String(data.generatedAt || '');
+      }
+      var label = data.dateNorm || data.date || '—';
+      dashboardStatus.innerHTML =
+        '<p class="result success">対象開催日（目安）: <strong>' +
+        escapeHtml(String(label)) +
+        '</strong> · 取得時刻（JST）: ' +
+        escapeHtml(jst) +
+        '</p>' +
+        '<p class="meta" style="font-size:0.8rem">会場ごとに「今の時刻に最も近い発走」のレースを自動選択しています。中央・南関・地方など、一覧データにある全会場が対象です。</p>';
+
+      var html = '';
+      (data.items || []).forEach(function (item) {
+        html += '<div class="dashboard-card">';
+        html += '<h3>' + escapeHtml(item.venue) + '</h3>';
+        html += '<p class="meta">race_id ' + item.raceId;
+        if (item.raceNumber != null) html += ' · 第' + item.raceNumber + 'レース';
+        html += ' · 発走 ' + escapeHtml(item.startTime || '—') + ' · 時刻差 約' + item.deltaMinutes + '分</p>';
+        if (item.rpt != null) html += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(item.rpt)) + '</span></p>';
+        if (item.ok) {
+          html += formatJudgmentHtml(item.judgment);
+          html +=
+            '<div class="horse-mini-wrap"><table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB</th><th class="num">単勝</th></tr></thead><tbody>';
+          (item.horses || []).forEach(function (h) {
+            html +=
+              '<tr><td>' +
+              escapeHtml(String(h.horseNumber)) +
+              '</td><td class="num">' +
+              (h.bb != null ? escapeHtml(String(h.bb)) : '—') +
+              '</td><td class="num">' +
+              (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') +
+              '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+          html +=
+            '<p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' +
+            item.raceId +
+            '">下のエリアに詳細を開く</button></p>';
+        } else {
+          html += '<p class="result error" style="margin-top:8px">' + escapeHtml(item.error || '取得失敗') + '</p>';
+        }
+        html += '</div>';
+      });
+      dashboardCards.innerHTML = html;
+      dashboardCards.querySelectorAll('.btn-open-bottom').forEach(function (btn) {
+        btn.onclick = function () {
+          fetchRaceDetail(parseInt(btn.getAttribute('data-race-id'), 10));
+          try {
+            resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (e2) {}
+        };
+      });
+      try {
+        document.getElementById('dashboardTop').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e3) {}
+    }
+
+    function loadDashboard() {
+      var err = requireCookieOrSaved();
+      if (err) {
+        dashboardStatus.innerHTML = '<p class="result error">' + escapeHtml(err) + '</p>';
+        dashboardCards.innerHTML = '';
+        return;
+      }
+      btnDashboard.disabled = true;
+      btnDashboardRefresh.disabled = true;
+      dashboardStatus.innerHTML =
+        '<p>取得中… 一覧を解析し、会場ごとの出馬表を読み込んでいます（<strong>30〜90秒</strong>かかることがあります）。</p>';
+      dashboardCards.innerHTML = '';
+      fetch('/api/dashboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cookieRequestBase()),
+        credentials: 'include',
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          renderDashboardResponse(data);
+        })
+        .catch(function (e) {
+          dashboardStatus.innerHTML = '<p class="result error">通信エラー: ' + escapeHtml(e.message) + '</p>';
+          dashboardCards.innerHTML = '';
+        })
+        .finally(function () {
+          btnDashboard.disabled = false;
+          btnDashboardRefresh.disabled = false;
+        });
+    }
+
+    btnDashboard.addEventListener('click', loadDashboard);
+    btnDashboardRefresh.addEventListener('click', loadDashboard);
+
+    // ---------- レース一覧から選ぶ ----------
+    btnRaceList.addEventListener('click', async () => {
+      var err = requireCookieOrSaved();
+      if (err) {
+        raceListResult.innerHTML = '<p class="result error">' + escapeHtml(err) + '</p>';
+        return;
+      }
+      btnRaceList.disabled = true;
+      raceListResult.innerHTML = '<p>取得中...</p>';
+      raceListRaces.innerHTML = '';
+      try {
+        const res = await fetch('/api/race-list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cookieRequestBase()),
+          credentials: 'include',
+        });
+        const data = await res.json();
+        if (data.ok && data.datesAndVenues && data.datesAndVenues.length > 0) {
+          dateVenueItems = data.datesAndVenues;
+          let html = '<p class="result success">日付・会場を取得しました。下で選択して「レース一覧を表示」を押してください。</p>';
+          html += '<p style="margin-top:10px"><label>日付・会場 <select id="dateVenueSelect" style="padding:6px 10px;margin-left:6px">';
+          dateVenueItems.forEach(function (item, i) {
+            html += '<option value="' + i + '">' + escapeHtml(item.date + ' ' + item.venue) + '</option>';
+          });
+          html += '</select></label> <button type="button" id="btnShowRaces">レース一覧を表示</button></p>';
+          raceListResult.innerHTML = html;
+          document.getElementById('btnShowRaces').onclick = showRacesForDateVenue;
+        } else {
+          raceListResult.innerHTML = '<p class="result error">' + escapeHtml(data.error || '取得に失敗しました。') + '</p>';
+        }
+      } catch (e) {
+        raceListResult.innerHTML = '<p class="result error">通信エラー: ' + escapeHtml(e.message) + '</p>';
+      } finally {
+        btnRaceList.disabled = false;
+      }
+    });
+
+    function showRacesForDateVenue() {
+      const sel = document.getElementById('dateVenueSelect');
+      if (!sel || dateVenueItems.length === 0) return;
+      const idx = parseInt(sel.value, 10);
+      const item = dateVenueItems[idx];
+      if (!item) return;
+      var err2 = requireCookieOrSaved();
+      if (err2) {
+        raceListRaces.innerHTML = '<p class="result error">' + escapeHtml(err2) + '</p>';
+        return;
+      }
+      raceListRaces.innerHTML = '<p>レース一覧を取得中…（RPTは詳細ページから補完するため、レース数に応じて<strong>20〜40秒ほど</strong>かかることがあります）</p>';
+      fetch('/api/race-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          Object.assign({}, cookieRequestBase(), { date: item.date, venue: item.venue }),
+        ),
+        credentials: 'include',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok && data.races && data.races.length > 0) {
+            currentRaces = data.races;
+            let html = '<p class="meta">' + item.date + ' ' + item.venue + ' のレース一覧</p>';
+            html += '<table class="parsed-table"><thead><tr><th>レース</th><th>RPT</th><th>発走</th><th></th></tr></thead><tbody>';
+            data.races.forEach(function (r, i) {
+              html += '<tr><td>R' + (i + 1) + '</td><td>' + (r.rpt != null ? r.rpt : '—') + '</td><td>' + (r.startTime || '—') + '</td><td><button type="button" class="btn-detail" data-race-id="' + r.raceId + '">詳細取得</button></td></tr>';
+            });
+            html += '</tbody></table>';
+            raceListRaces.innerHTML = html;
+            raceListRaces.querySelectorAll('.btn-detail').forEach(function (btn) {
+              btn.onclick = function () { fetchRaceDetail(parseInt(btn.getAttribute('data-race-id'), 10)); };
+            });
+          } else {
+            raceListRaces.innerHTML = '<p class="result error">' + escapeHtml(data.error || 'レースがありません。') + '</p>';
+          }
+        })
+        .catch(function (e) {
+          raceListRaces.innerHTML = '<p class="result error">通信エラー: ' + escapeHtml(e.message) + '</p>';
+        });
+    }
+
+    function fetchRaceDetail(raceId) {
+      var err = requireCookieOrSaved();
+      if (err) {
+        showResult(false, err);
+        return;
+      }
+      resultEl.innerHTML = '<p>詳細取得中...</p>';
+      resultEl.className = 'result';
+      fetch('/api/fetch-race', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({}, cookieRequestBase(), { raceId: raceId })),
+        credentials: 'include',
+      })
+        .then(function (r) { return r.text().then(function (text) { return { status: r.status, text: text }; }); })
+        .then(function (pack) {
+          var text = pack.text;
+          if (pack.status === 401) {
+            showResult(false, '認証に失敗しました（401）。ページを再読み込みして ID/パスワードを入力し直してください。', null);
+            try { document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e2) {}
+            return;
+          }
+          let data;
+          try { data = JSON.parse(text); } catch (err) {
+            showResult(false, 'サーバーがJSONではなくHTMLを返しました。', null);
+            return;
+          }
+          if (data.ok) {
+            let detail = '<p class="meta">race_id=' + data.raceId + ' の出馬表（RPT・馬番・BB指数・単勝オッズ）</p>';
+            if (data.rpt != null) detail += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(data.rpt)) + '</span></p>';
+            detail += formatJudgmentHtml(data.judgment);
+            detail += '<table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB指数</th><th class="num">単勝オッズ</th></tr></thead><tbody>';
+            (data.horses || []).forEach(function (h) {
+              detail += '<tr><td>' + escapeHtml(String(h.horseNumber)) + '</td><td class="num">' + (h.bb != null ? escapeHtml(String(h.bb)) : '—') + '</td><td class="num">' + (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') + '</td></tr>';
+            });
+            detail += '</tbody></table>';
+            showResult(true, '詳細を取得しました。', detail);
+            try { document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e3) {}
+          } else {
+            showResult(false, data.error || '取得に失敗しました。', data.hint ? '<p class="meta">' + escapeHtml(data.hint) + '</p>' : null);
+            try { document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e4) {}
+          }
+        })
+        .catch(function (e) {
+          showResult(false, '通信エラー: ' + e.message);
+        });
+    }
+
+    btnFetch.addEventListener('click', async () => {
+      var err = requireCookieOrSaved();
+      if (err) {
+        showResult(false, err);
+        return;
+      }
+      const url = urlEl.value.trim();
+      const useBrowser = document.getElementById('useBrowser').checked;
+      if (!url) {
+        showResult(false, 'データページのURLを入力してください。');
+        return;
+      }
+      if (url.indexOf('race-analyze') === -1) {
+        showResult(false, 'URLに「race-analyze」が含まれていません。出馬表を表示したうえで、レースを「新しいタブで開く」などして race_id 付きのURLをコピーしてください。');
+        return;
+      }
+      if (url.indexOf('race_id=') === -1) {
+        showResult(false, 'URLに「?race_id=数字」が含まれていません。race-analyze-next のままでは取得できません。レースを右クリック→「新しいタブで開く」で開くと、アドレスバーに ?race_id=... が表示されます。そのURLをコピーしてください。');
+        return;
+      }
+
+      btnFetch.disabled = true;
+      resultEl.innerHTML = '<p>' + (useBrowser ? 'ブラウザで取得中（十数秒かかることがあります）...' : '取得中...') + '</p>';
+      resultEl.className = 'result';
+
+      try {
+        const endpoint = useBrowser ? '/api/fetch-browser' : '/api/fetch';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(Object.assign({}, cookieRequestBase(), { url: url })),
+          credentials: 'include',
+        });
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          showResult(false, 'サーバーがJSONではなくHTMLを返しました。サーバー側でエラーが起きている可能性があります。', '<p class="meta">先頭500文字:</p><pre style="background:#1e293b;color:#e2e8f0;padding:8px;font-size:11px;max-height:120px;overflow:auto">' + escapeHtml(text.slice(0, 500)) + '</pre>');
+          btnFetch.disabled = false;
+          return;
+        }
+
+        if (data.ok) {
+          let detail = '';
+          if (data.parsed && data.parsed.horses && data.parsed.horses.length > 0) {
+            detail += '<p class="meta">RPT・馬番・BB指数・単勝オッズを抽出しました。</p>';
+            if (data.parsed.rpt != null) {
+              detail += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(data.parsed.rpt)) + '</span></p>';
+            }
+            detail += formatJudgmentHtml(data.parsed.judgment);
+            detail += '<table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB指数</th><th class="num">単勝オッズ</th></tr></thead><tbody>';
+            data.parsed.horses.forEach(function(h) {
+              detail += '<tr><td>' + escapeHtml(String(h.horseNumber)) + '</td><td class="num">' + (h.bb != null ? escapeHtml(String(h.bb)) : '—') + '</td><td class="num">' + (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') + '</td></tr>';
+            });
+            detail += '</tbody></table>';
+          } else {
+            if (data.hint) {
+              detail += '<p class="meta" style="background:#fef3c7;color:#92400e;padding:10px;border-radius:6px;margin-bottom:8px">' + escapeHtml(data.hint) + '</p>';
+              if (data.hint.indexOf('トップページ') !== -1) {
+                detail += '<p class="meta" style="background:#dbeafe;color:#1e40af;padding:10px;border-radius:6px;margin-bottom:8px"><strong>まだの場合</strong>：「ブラウザで取得」にチェックを入れて、もう一度「取得」を押してください。Cookie を出馬表表示中のタブでコピーし直すと改善することがあります。</p>';
+              }
+            }
+            detail += '<p class="meta">パースできませんでした。返ってきたHTMLの先頭を下で確認できます。</p>';
+            const preview = data.html.length > 3500 ? data.html.slice(0, 3500) + '\n... (省略)' : data.html;
+            detail += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:0.875rem">返ってきたHTMLの先頭を表示</summary><pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:11px;max-height:280px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:6px">' + escapeHtml(preview) + '</pre></details>';
+          }
+          detail += '<p class="meta" style="margin-top:12px">HTML文字数: ' + data.length.toLocaleString() + '</p>';
+          showResult(true, '取得しました。', detail);
+        } else {
+          let errMsg = data.error || '取得に失敗しました。';
+          if (data.hint) errMsg += ' — ' + data.hint;
+          showResult(false, errMsg);
+        }
+      } catch (e) {
+        showResult(false, '通信エラー: ' + e.message);
+      } finally {
+        btnFetch.disabled = false;
+      }
+    });
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>分析・データ蓄積 · 競馬予想ツール</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #f0fdfa; min-height: 100vh; }
+    .container { max-width: 640px; margin: 0 auto; }
+    nav { margin-bottom: 14px; padding: 10px 0; border-bottom: 1px solid #99f6e4; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; font-size: 0.875rem; }
+    nav a { color: #0f766e; text-decoration: none; font-weight: 600; }
+    nav a.muted { color: #64748b; font-weight: 500; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px 0; color: #134e4a; }
+    .steps { background: #fff; border: 1px solid #99f6e4; border-radius: 10px; padding: 16px 18px; margin-bottom: 20px; }
+    .steps ol { margin: 0; padding-left: 1.25rem; color: #334155; font-size: 0.9rem; line-height: 1.65; }
+    .steps li { margin-bottom: 10px; }
+    label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 6px; color: #444; }
+    textarea { width: 100%; min-height: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; }
+    .hint { font-size: 0.75rem; color: #64748b; margin-top: 6px; margin-bottom: 12px; }
+    button { background: #0d9488; color: #fff; border: none; padding: 10px 18px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #0f766e; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    button.btn-secondary { background: #64748b; margin-left: 8px; }
+    #sessionStatus { font-size: 0.8rem; color: #475569; margin: 12px 0; line-height: 1.5; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .panel h2 { font-size: 1rem; margin: 0 0 10px 0; color: #0f172a; }
+    .cta { display: inline-block; margin-top: 12px; padding: 12px 18px; background: #2563eb; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 0.9rem; }
+    .cta:hover { background: #1d4ed8; }
+    .soon { background: #fef3c7; color: #92400e; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 12px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <a href="/">← トップ</a>
+      <span style="color:#99f6e4">|</span>
+      <a href="/today.html" class="muted">今日のレースへ</a>
+    </nav>
+
+    <h1>分析・データ蓄積</h1>
+
+    <div class="steps">
+      <strong style="color:#134e4a">手順（このページ）</strong>
+      <ol style="margin-top:12px">
+        <li>競馬クラスターで<strong>過去の開催日</strong>の画面を開き、当日用とは別にログイン（必要ならその日のパスワード）します。</li>
+        <li>開発者ツール（F12）→ アプリケーション → Cookie から <code>laravel_session</code> と <code>XSRF-TOKEN</code> をコピーします。</li>
+        <li>下の欄に貼り付け、<strong>「過去・DB用としてサーバーに保存」</strong>を押します。</li>
+        <li>レースデータを取り込むときは、<strong>今日のレース</strong>ページを開き、取得時のラジオで<strong>「過去・DB用」</strong>を選びます（または下のボタンで自動で選んだ状態で開きます）。</li>
+      </ol>
+    </div>
+
+    <div class="panel">
+      <h2>過去・DB用 Cookie の保存</h2>
+      <p class="hint" style="margin-top:0">ここでの保存は常に <strong>過去開催・DB取り込み用</strong> スロットに入ります。今日の追跡用は <a href="/today.html">今日のレース</a> ページで保存してください。</p>
+      <label for="cookie">Cookie</label>
+      <textarea id="cookie" placeholder="laravel_session=... （2行で TOKEN だけでも可）"></textarea>
+      <p class="hint">サーバーに保存すると、iPhone では「今日のレース」ページで保存済み＋「過去・DB用」ラジオを選べば使えます。</p>
+      <p id="sessionStatus">セッション状態を確認中...</p>
+      <button type="button" id="btnSaveArchive">過去・DB用としてサーバーに保存</button>
+      <button type="button" id="btnClearArchive" class="btn-secondary">過去・DB用の保存を削除</button>
+    </div>
+
+    <div class="panel">
+      <h2>レースデータの取得</h2>
+      <p style="font-size:0.875rem;color:#64748b;margin:0;line-height:1.55">データ取得・一覧・判定の機能は「今日のレース」と同じです。次のボタンから開くと、<strong>取得で使う Cookie が「過去・DB用」に自動で切り替わった状態</strong>で始まります。</p>
+      <a class="cta" href="/today.html?purpose=archive">今日のレースページを開く（過去・DB用モード）</a>
+      <div class="soon"><strong>今後の予定：</strong> 取得結果を自動でDBに溜める・結果CSVと突合して回収率を出す機能を追加予定です。</div>
+    </div>
+  </div>
+
+  <script>
+    const cookieEl = document.getElementById('cookie');
+    const sessionStatusEl = document.getElementById('sessionStatus');
+    const btnSaveArchive = document.getElementById('btnSaveArchive');
+    const btnClearArchive = document.getElementById('btnClearArchive');
+
+    async function refreshStatus() {
+      try {
+        const res = await fetch('/api/keiba-session/status', { credentials: 'include' });
+        const data = await res.json();
+        if (!data) return;
+        var line = '過去・DB用: ';
+        if (data.hasSavedArchive) {
+          var p = [];
+          if (data.hasEnvArchive) p.push('環境変数 KEIBA_COOKIE_ARCHIVE');
+          if (data.hasFileArchive) p.push('サーバー保存');
+          line += 'あり（' + p.join('＋') + '）';
+        } else {
+          line += '<span style="color:#94a3b8">未設定</span>（上で保存するか Render に KEIBA_COOKIE_ARCHIVE）';
+        }
+        sessionStatusEl.innerHTML = line;
+      } catch (e) {
+        sessionStatusEl.textContent = '状態を取得できませんでした。';
+      }
+    }
+
+    btnSaveArchive.addEventListener('click', async function () {
+      var c = cookieEl.value.trim();
+      if (!c) {
+        alert('Cookie を貼り付けてください。');
+        return;
+      }
+      btnSaveArchive.disabled = true;
+      try {
+        var res = await fetch('/api/keiba-session', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie: c, cookiePurpose: 'archive' }),
+          credentials: 'include',
+        });
+        var data = await res.json();
+        if (data.ok) {
+          alert(data.message || '保存しました。');
+          await refreshStatus();
+        } else {
+          alert(data.error || '保存に失敗しました。');
+        }
+      } catch (e) {
+        alert('通信エラー: ' + e.message);
+      } finally {
+        btnSaveArchive.disabled = false;
+      }
+    });
+
+    btnClearArchive.addEventListener('click', async function () {
+      if (!confirm('過去・DB用のサーバー保存ファイルを削除しますか？')) return;
+      btnClearArchive.disabled = true;
+      try {
+        var res = await fetch('/api/keiba-session', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookiePurpose: 'archive' }),
+          credentials: 'include',
+        });
+        var data = await res.json();
+        if (data.ok) await refreshStatus();
+        else alert(data.error || '削除に失敗しました。');
+      } catch (e) {
+        alert('通信エラー: ' + e.message);
+      } finally {
+        btnClearArchive.disabled = false;
+      }
+    });
+
+    refreshStatus();
+  </script>
+</body>
+</html>
