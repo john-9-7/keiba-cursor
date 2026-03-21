@@ -9,6 +9,12 @@ const path = require('path');
 const { parseRacePage } = require('./lib/parseRacePage');
 const { normalizeCookie } = require('./lib/normalizeCookie');
 const { parseRaceList, listDatesAndVenues } = require('./lib/parseRaceList');
+const {
+  resolveKeibaCookie,
+  saveKeibaSession,
+  clearKeibaSession,
+  getKeibaSessionStatus,
+} = require('./lib/keibaSession');
 let fetchWithBrowser;
 try {
   fetchWithBrowser = require('./lib/fetchWithBrowser').fetchWithBrowser;
@@ -65,6 +71,40 @@ app.get('/healthz', (req, res) => {
   res.status(200).json({ ok: true });
 });
 
+/**
+ * GET /api/keiba-session/status
+ * サーバーに保存済みCookie / 環境変数 KEIBA_COOKIE があるか（値は返さない）
+ */
+app.get('/api/keiba-session/status', (req, res) => {
+  res.json(getKeibaSessionStatus());
+});
+
+/**
+ * POST /api/keiba-session
+ * Body: { "cookie": "laravel_session=...; XSRF-TOKEN=..." }
+ * PCで一度貼り付けて保存。以後 iPhone では Cookie 欄を空にして「保存済みを使う」でOK。
+ */
+app.post('/api/keiba-session', (req, res) => {
+  const { cookie } = req.body || {};
+  const result = saveKeibaSession(cookie);
+  if (!result.ok) {
+    return res.status(400).json({ ok: false, error: result.error });
+  }
+  res.json({ ok: true, message: 'サーバーに保存しました。' });
+});
+
+/**
+ * DELETE /api/keiba-session
+ * サーバー保存ファイルを削除（環境変数 KEIBA_COOKIE は削除できない）
+ */
+app.delete('/api/keiba-session', (req, res) => {
+  const result = clearKeibaSession();
+  if (!result.ok) {
+    return res.status(500).json({ ok: false, error: result.error });
+  }
+  res.json({ ok: true, message: 'サーバー保存を削除しました。' });
+});
+
 // 静的ファイル（public/）
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -104,7 +144,7 @@ app.post('/api/fetch', async (req, res) => {
     });
   }
 
-  const cookieStr = normalizeCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie);
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -115,6 +155,14 @@ app.post('/api/fetch', async (req, res) => {
   }
 
   try {
+    if (!cookieStr) {
+      return res.status(400).json({
+        ok: false,
+        error: '競馬クラスターの Cookie がありません。',
+        hint: 'PCで一度 Cookie を貼って「サーバーに保存」するか、Render の環境変数 KEIBA_COOKIE を設定してください。',
+      });
+    }
+
     const response = await fetch(url, {
       method: 'GET',
       headers,
@@ -177,7 +225,7 @@ const RACE_LIST_URL = 'https://web.keibacluster.com/top/race-list';
  */
 app.post('/api/race-list', async (req, res) => {
   const { cookie, date, venue } = req.body || {};
-  const cookieStr = normalizeCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie);
 
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -187,6 +235,14 @@ app.post('/api/race-list', async (req, res) => {
   if (cookieStr) headers['Cookie'] = cookieStr;
 
   try {
+    if (!cookieStr) {
+      return res.status(400).json({
+        ok: false,
+        error: '競馬クラスターの Cookie がありません。',
+        hint: 'PCで Cookie を貼って「サーバーに保存」するか、環境変数 KEIBA_COOKIE を設定し、「保存済みの Cookie を使う」にチェックを入れてください。',
+      });
+    }
+
     const response = await fetch(RACE_LIST_URL, { method: 'GET', headers, redirect: 'follow' });
     if (!response.ok) {
       return res.status(200).json({ ok: false, error: `HTTP ${response.status}` });
@@ -229,7 +285,7 @@ app.post('/api/fetch-race', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'raceId を指定してください。' });
   }
   const url = `https://web.keibacluster.com/top/race-analyze?race_id=${id}`;
-  const cookieStr = normalizeCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie);
   const headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
@@ -237,6 +293,14 @@ app.post('/api/fetch-race', async (req, res) => {
   };
   if (cookieStr) headers['Cookie'] = cookieStr;
   try {
+    if (!cookieStr) {
+      return res.status(400).json({
+        ok: false,
+        error: '競馬クラスターの Cookie がありません。',
+        hint: 'PCで Cookie を貼って「サーバーに保存」するか、環境変数 KEIBA_COOKIE を設定してください。',
+      });
+    }
+
     const response = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
     if (!response.ok) {
       return res.status(200).json({ ok: false, error: `HTTP ${response.status}` });
@@ -292,8 +356,16 @@ app.post('/api/fetch-browser', async (req, res) => {
     });
   }
 
-  const cookieStr = normalizeCookie(cookie);
+  const cookieStr = resolveKeibaCookie(cookie);
   try {
+    if (!cookieStr) {
+      return res.status(400).json({
+        ok: false,
+        error: '競馬クラスターの Cookie がありません。',
+        hint: 'PCで Cookie を貼って「サーバーに保存」するか、環境変数 KEIBA_COOKIE を設定してください。',
+      });
+    }
+
     const { ok, html, error, status } = await fetchWithBrowser(url, cookieStr);
     if (!ok || !html) {
       const hint404 = status === 404

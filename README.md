@@ -78,6 +78,7 @@
    - `ENABLE_AUTH=true`
    - `AUTH_USER=あなた専用ID`
    - `AUTH_PASS=長く強いパスワード`
+   - （任意・iPhoneで毎回Cookieを貼りたくない場合）`KEIBA_COOKIE` … PCでコピーした `laravel_session=...; XSRF-TOKEN=...` を1行で貼り付け
 6. Deploy 実行
 7. 発行された `https://...onrender.com` にアクセスし、ID/パスワードでログインできることを確認
 
@@ -87,3 +88,16 @@
 - 必ず `https://` のURLだけ使う
 - パスワードは定期的に変更
 - 公開URLを第三者に共有しない
+
+## iPhone だけで使う（Cookieを毎回貼らない）
+
+競馬クラスターの Cookie は iPhone の Safari からは取りにくいため、次のどちらかを使います。
+
+1. **PCで一度「サーバーに Cookie を保存」**  
+   ツール画面のボタンで保存 → iPhone では **「保存済みの Cookie を使う」にチェック**し、Cookie 欄は空のまま取得。
+
+2. **Render の環境変数 `KEIBA_COOKIE`（おすすめ）**  
+   PCでコピーした Cookie を Render の Environment に貼る。再デプロイ後も残り、**iPhone はチェックだけで完結**しやすいです。  
+   ※ Cookie の有効期限が切れたら、PCで取り直して `KEIBA_COOKIE` を更新してください。
+
+※ Render の無料枠ではサーバー内ファイルは再起動で消えることがあるため、**本番は `KEIBA_COOKIE` 併用**を推奨します。
