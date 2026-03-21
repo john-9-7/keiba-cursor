@@ -105,8 +105,17 @@ app.delete('/api/keiba-session', (req, res) => {
   res.json({ ok: true, message: 'サーバー保存を削除しました。' });
 });
 
-// 静的ファイル（public/）
-app.use(express.static(path.join(__dirname, 'public')));
+// 静的ファイル（public/）— HTML はキャッシュさせず、デプロイ直後も最新画面が出るようにする
+app.use(
+  express.static(path.join(__dirname, 'public'), {
+    setHeaders(res, filePath) {
+      if (filePath.endsWith('.html')) {
+        res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+      }
+    },
+  }),
+);
 
 // トップは index.html
 app.get('/', (req, res) => {
