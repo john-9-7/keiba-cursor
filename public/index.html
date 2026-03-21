@@ -8,6 +8,15 @@
     * { box-sizing: border-box; }
     body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
     .container { max-width: 640px; margin: 0 auto; }
+    .dashboard-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
+    .dashboard-card h3 { margin: 0 0 6px 0; font-size: 1.05rem; color: #1e293b; }
+    .horse-mini-wrap { margin-top: 10px; max-height: 220px; overflow: auto; border-radius: 6px; border: 1px solid #e5e7eb; }
+    .horse-mini-wrap .parsed-table { margin-top: 0; font-size: 12px; }
+    .horse-mini-wrap .parsed-table th, .horse-mini-wrap .parsed-table td { padding: 6px 8px; }
+    details.race-legacy { margin-top: 16px; padding: 10px; background: #f8fafc; border-radius: 8px; border: 1px solid #e2e8f0; }
+    details.race-legacy summary { cursor: pointer; font-weight: 600; color: #475569; }
+    .btn-open-bottom { background: #64748b; color: #fff; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; margin-top: 6px; }
+    .btn-open-bottom:hover { background: #475569; }
     h1 { font-size: 1.25rem; margin-bottom: 16px; color: #333; }
     label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 4px; color: #555; }
     textarea, input[type="url"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
@@ -41,7 +50,7 @@
 <body>
   <div class="container">
     <h1>競馬予想ツール</h1>
-    <p style="font-size: 0.875rem; color: #666; margin-bottom: 12px;">ブラウザで競馬クラスターにログインし、Cookie を入力してください。URLを調べずに<strong>レース一覧から選んで</strong>出馬表を取得できます。</p>
+    <p style="font-size: 0.875rem; color: #666; margin-bottom: 12px;">ブラウザで競馬クラスターにログインし、Cookie を入力してください。<strong>「データ取得」</strong>で、会場ごとに今の時刻に最も近い発走のレースだけをまとめて判定します（日付・会場の選択は不要）。</p>
 
     <label for="cookie">Cookie</label>
     <textarea id="cookie" placeholder="開発者ツールなどでコピーした Cookie をそのまま貼り付けてください"></textarea>
@@ -60,11 +69,23 @@
     </p>
     <p class="hint" style="margin-bottom:16px;background:#eff6ff;padding:8px 10px;border-radius:6px;color:#1e40af">初回だけPCで Cookie を貼って「サーバーに保存」。以後は iPhone でチェックを入れたまま、<strong>Cookie欄は空</strong>で取得できます。Render では再デプロイで消えるため、環境変数 <code>KEIBA_COOKIE</code> も併用推奨です。</p>
 
-    <section class="race-list-section" style="margin-bottom: 24px;">
-      <h2 style="font-size: 1rem; margin-bottom: 8px;">レース一覧から選ぶ（URL不要）</h2>
-      <button type="button" id="btnRaceList">レース一覧を取得</button>
-      <div id="raceListResult" style="margin-top: 12px;"></div>
-      <div id="raceListRaces" style="margin-top: 12px;"></div>
+    <section class="race-list-section" id="dashboardTop" style="margin-bottom: 24px;">
+      <h2 style="font-size: 1rem; margin-bottom: 8px;">いまの注目レース（全会場・自動）</h2>
+      <p class="hint" style="margin-bottom: 10px;">開催日は <strong>JST の今日</strong>を優先し、無ければ直近の開催日を使います。各会場について、<strong>今の時刻に最も近い発走</strong>の1レースだけを選び、オッズ付きで買い／見送りを表示します。</p>
+      <p style="margin-bottom: 10px;">
+        <button type="button" id="btnDashboard">データ取得</button>
+        <button type="button" id="btnDashboardRefresh" class="btn-secondary">更新</button>
+      </p>
+      <div id="dashboardStatus" style="margin-top: 8px;"></div>
+      <div id="dashboardCards" style="margin-top: 12px;"></div>
+
+      <details class="race-legacy">
+        <summary>従来どおり：日付・会場を選んでレース一覧</summary>
+        <p class="hint" style="margin-top: 10px;">一覧だけ見たい・別レースの詳細を取りたいとき用です。</p>
+        <button type="button" id="btnRaceList" style="margin-top: 8px;">レース一覧を取得</button>
+        <div id="raceListResult" style="margin-top: 12px;"></div>
+        <div id="raceListRaces" style="margin-top: 12px;"></div>
+      </details>
     </section>
 
     <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
@@ -91,6 +112,10 @@
     const btnFetch = document.getElementById('btnFetch');
     const resultEl = document.getElementById('result');
     const btnRaceList = document.getElementById('btnRaceList');
+    const btnDashboard = document.getElementById('btnDashboard');
+    const btnDashboardRefresh = document.getElementById('btnDashboardRefresh');
+    const dashboardStatus = document.getElementById('dashboardStatus');
+    const dashboardCards = document.getElementById('dashboardCards');
     const raceListResult = document.getElementById('raceListResult');
     const raceListRaces = document.getElementById('raceListRaces');
     const useSavedSessionEl = document.getElementById('useSavedSession');
@@ -221,6 +246,113 @@
     });
 
     refreshSessionStatus();
+
+    function renderDashboardResponse(data) {
+      if (!data.ok) {
+        dashboardStatus.innerHTML =
+          '<p class="result error">' + escapeHtml(data.error || '取得に失敗しました。') + '</p>' +
+          (data.hint ? '<p class="meta">' + escapeHtml(data.hint) + '</p>' : '');
+        dashboardCards.innerHTML = '';
+        return;
+      }
+      var jst = '';
+      try {
+        jst = new Date(data.generatedAt).toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
+      } catch (e1) {
+        jst = String(data.generatedAt || '');
+      }
+      var label = data.dateNorm || data.date || '—';
+      dashboardStatus.innerHTML =
+        '<p class="result success">対象開催日（目安）: <strong>' +
+        escapeHtml(String(label)) +
+        '</strong> · 取得時刻（JST）: ' +
+        escapeHtml(jst) +
+        '</p>' +
+        '<p class="meta" style="font-size:0.8rem">会場ごとに「今の時刻に最も近い発走」のレースを自動選択しています。中央・南関・地方など、一覧データにある全会場が対象です。</p>';
+
+      var html = '';
+      (data.items || []).forEach(function (item) {
+        html += '<div class="dashboard-card">';
+        html += '<h3>' + escapeHtml(item.venue) + '</h3>';
+        html += '<p class="meta">race_id ' + item.raceId;
+        if (item.raceNumber != null) html += ' · 第' + item.raceNumber + 'レース';
+        html += ' · 発走 ' + escapeHtml(item.startTime || '—') + ' · 時刻差 約' + item.deltaMinutes + '分</p>';
+        if (item.rpt != null) html += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(item.rpt)) + '</span></p>';
+        if (item.ok) {
+          html += formatJudgmentHtml(item.judgment);
+          html +=
+            '<div class="horse-mini-wrap"><table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB</th><th class="num">単勝</th></tr></thead><tbody>';
+          (item.horses || []).forEach(function (h) {
+            html +=
+              '<tr><td>' +
+              escapeHtml(String(h.horseNumber)) +
+              '</td><td class="num">' +
+              (h.bb != null ? escapeHtml(String(h.bb)) : '—') +
+              '</td><td class="num">' +
+              (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') +
+              '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+          html +=
+            '<p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' +
+            item.raceId +
+            '">下のエリアに詳細を開く</button></p>';
+        } else {
+          html += '<p class="result error" style="margin-top:8px">' + escapeHtml(item.error || '取得失敗') + '</p>';
+        }
+        html += '</div>';
+      });
+      dashboardCards.innerHTML = html;
+      dashboardCards.querySelectorAll('.btn-open-bottom').forEach(function (btn) {
+        btn.onclick = function () {
+          fetchRaceDetail(parseInt(btn.getAttribute('data-race-id'), 10));
+          try {
+            resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (e2) {}
+        };
+      });
+      try {
+        document.getElementById('dashboardTop').scrollIntoView({ behavior: 'smooth', block: 'start' });
+      } catch (e3) {}
+    }
+
+    function loadDashboard() {
+      var err = requireCookieOrSaved();
+      if (err) {
+        dashboardStatus.innerHTML = '<p class="result error">' + escapeHtml(err) + '</p>';
+        dashboardCards.innerHTML = '';
+        return;
+      }
+      const cookie = effectiveCookieForRequest();
+      btnDashboard.disabled = true;
+      btnDashboardRefresh.disabled = true;
+      dashboardStatus.innerHTML =
+        '<p>取得中… 一覧を解析し、会場ごとの出馬表を読み込んでいます（<strong>30〜90秒</strong>かかることがあります）。</p>';
+      dashboardCards.innerHTML = '';
+      fetch('/api/dashboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookie }),
+        credentials: 'include',
+      })
+        .then(function (r) {
+          return r.json();
+        })
+        .then(function (data) {
+          renderDashboardResponse(data);
+        })
+        .catch(function (e) {
+          dashboardStatus.innerHTML = '<p class="result error">通信エラー: ' + escapeHtml(e.message) + '</p>';
+          dashboardCards.innerHTML = '';
+        })
+        .finally(function () {
+          btnDashboard.disabled = false;
+          btnDashboardRefresh.disabled = false;
+        });
+    }
+
+    btnDashboard.addEventListener('click', loadDashboard);
+    btnDashboardRefresh.addEventListener('click', loadDashboard);
 
     // ---------- レース一覧から選ぶ ----------
     btnRaceList.addEventListener('click', async () => {

@@ -16,7 +16,10 @@ const {
   getKeibaSessionStatus,
 } = require('./lib/keibaSession');
 const { enrichMissingRptFromAnalyzePages } = require('./lib/enrichRaceListRpt');
+const { pickDashboardRacesFromListHtml } = require('./lib/dashboardPicks');
 const { judgeRace } = require('./lib/judgment');
+
+const DASHBOARD_FETCH_CONCURRENCY = 5;
 
 /** パース済み馬行から判定オブジェクトを生成（API用） */
 function buildJudgment(rpt, horses) {
@@ -304,6 +307,150 @@ app.post('/api/race-list', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/dashboard
+ * レース一覧HTMLを1回取得し、JST基準の対象日×全会場で「発走が現在に最も近い」レースを自動選択、
+ * 各レースの出馬表・オッズ・判定をまとめて返す（更新ボタンでも同API）。
+ */
+app.post('/api/dashboard', async (req, res) => {
+  const { cookie } = req.body || {};
+  const cookieStr = resolveKeibaCookie(cookie);
+  try {
+    if (!cookieStr) {
+      return res.status(400).json({
+        ok: false,
+        error: '競馬クラスターの Cookie がありません。',
+        hint: 'PCで Cookie を貼って「サーバーに保存」するか、環境変数 KEIBA_COOKIE を設定してください。',
+      });
+    }
+
+    const listHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      Referer: 'https://web.keibacluster.com/top/race-list',
+      Cookie: cookieStr,
+    };
+
+    const response = await fetch(RACE_LIST_URL, { method: 'GET', headers: listHeaders, redirect: 'follow' });
+    if (!response.ok) {
+      return res.status(200).json({ ok: false, error: `レース一覧: HTTP ${response.status}` });
+    }
+    const html = await response.text();
+    const isTopPage =
+      /競馬クラスターWeb|β版/.test(html) &&
+      /中央競馬.*南関競馬|race-btn/.test(html.replace(/\s/g, '')) &&
+      !/race-container/.test(html);
+    if (isTopPage || html.length < 10000) {
+      return res.status(200).json({
+        ok: false,
+        error: 'トップページが返っています。Cookie を確認してください。',
+      });
+    }
+
+    const { date, dateNorm, picks } = pickDashboardRacesFromListHtml(html);
+    if (!picks || picks.length === 0) {
+      return res.status(200).json({
+        ok: false,
+        error: '会場別の自動レース選択ができませんでした。',
+        hint:
+          '一覧ページに埋め込みデータが無い、または発走時刻が取れない可能性があります。下の「従来の手順」で日付・会場を選んでください。',
+      });
+    }
+
+    const analyzeHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      Referer: 'https://web.keibacluster.com/top/race-analyze-next',
+      Cookie: cookieStr,
+    };
+
+    const items = new Array(picks.length);
+    let cursor = 0;
+
+    async function dashboardWorker() {
+      for (;;) {
+        const idx = cursor;
+        cursor += 1;
+        if (idx >= picks.length) return;
+        const p = picks[idx];
+        const url = `https://web.keibacluster.com/top/race-analyze?race_id=${p.raceId}`;
+        try {
+          const r = await fetch(url, { method: 'GET', headers: analyzeHeaders, redirect: 'follow' });
+          if (!r.ok) {
+            items[idx] = {
+              ok: false,
+              venue: p.venue,
+              raceId: p.raceId,
+              raceNumber: p.raceNumber,
+              startTime: p.startTime,
+              rpt: p.rpt,
+              deltaMinutes: p.deltaMinutes,
+              error: `HTTP ${r.status}`,
+            };
+            continue;
+          }
+          const h = await r.text();
+          const parsed = parseRacePage(h);
+          const badPage =
+            /競馬クラスターWeb|β版/.test(h) &&
+            /race-btn/.test(h.replace(/\s/g, '')) &&
+            !(parsed.horses && parsed.horses.length > 0);
+          if (badPage || !parsed.horses || parsed.horses.length === 0) {
+            items[idx] = {
+              ok: false,
+              venue: p.venue,
+              raceId: p.raceId,
+              raceNumber: p.raceNumber,
+              startTime: p.startTime,
+              rpt: p.rpt,
+              deltaMinutes: p.deltaMinutes,
+              error: '出馬表を取得できませんでした（トップページまたは空）。',
+            };
+            continue;
+          }
+          const judgment = buildJudgment(parsed.rpt, parsed.horses);
+          items[idx] = {
+            ok: true,
+            venue: p.venue,
+            raceId: p.raceId,
+            raceNumber: p.raceNumber,
+            startTime: p.startTime,
+            rpt: parsed.rpt != null ? parsed.rpt : p.rpt,
+            deltaMinutes: p.deltaMinutes,
+            judgment,
+            horses: parsed.horses,
+          };
+        } catch (e) {
+          items[idx] = {
+            ok: false,
+            venue: p.venue,
+            raceId: p.raceId,
+            raceNumber: p.raceNumber,
+            startTime: p.startTime,
+            rpt: p.rpt,
+            deltaMinutes: p.deltaMinutes,
+            error: e.message || '取得エラー',
+          };
+        }
+      }
+    }
+
+    const nW = Math.min(DASHBOARD_FETCH_CONCURRENCY, picks.length);
+    await Promise.all(Array.from({ length: nW }, () => dashboardWorker()));
+
+    res.json({
+      ok: true,
+      generatedAt: new Date().toISOString(),
+      date,
+      dateNorm,
+      items,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: err.message || 'dashboard 取得に失敗しました。' });
   }
 });
 
