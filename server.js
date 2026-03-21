@@ -16,6 +16,26 @@ const {
   getKeibaSessionStatus,
 } = require('./lib/keibaSession');
 const { enrichMissingRptFromAnalyzePages } = require('./lib/enrichRaceListRpt');
+const { judgeRace } = require('./lib/judgment');
+
+/** パース済み馬行から判定オブジェクトを生成（API用） */
+function buildJudgment(rpt, horses) {
+  if (!horses || horses.length === 0) return null;
+  const rows = horses.map((h) => ({
+    horseNumber: Number(h.horseNumber),
+    bb: h.bb != null && h.bb !== '' && !Number.isNaN(Number(h.bb)) ? Number(h.bb) : null,
+    winOdds:
+      h.winOdds != null && h.winOdds !== '' && !Number.isNaN(Number(h.winOdds)) ? Number(h.winOdds) : null,
+  }));
+  const j = judgeRace(rpt, rows);
+  return {
+    verdict: j.verdict,
+    pattern: j.pattern,
+    lines: j.lines,
+    recommend: j.recommend,
+    meta: j.meta,
+  };
+}
 let fetchWithBrowser;
 try {
   fetchWithBrowser = require('./lib/fetchWithBrowser').fetchWithBrowser;
@@ -209,11 +229,13 @@ app.post('/api/fetch', async (req, res) => {
           : '出馬表が含まれていません。会場・レースを選んだ「レース分析」ページのURLか、Cookie が正しく渡っているか確認してください。';
       }
     }
+    const parsedPayload = parsed.ok ? { rpt: parsed.rpt, horses: parsed.horses } : null;
+    const judgment = parsed.ok ? buildJudgment(parsed.rpt, parsed.horses) : null;
     res.json({
       ok: true,
       html,
       length: html.length,
-      parsed: parsed.ok ? { rpt: parsed.rpt, horses: parsed.horses } : null,
+      parsed: parsedPayload ? { ...parsedPayload, judgment } : null,
       hint: hint || undefined,
       requestedUrl: url,
     });
@@ -327,11 +349,13 @@ app.post('/api/fetch-race', async (req, res) => {
         hint: 'Cookie の有効期限を確認してください。',
       });
     }
+    const judgment = buildJudgment(parsed.rpt, parsed.horses);
     res.json({
       ok: true,
       raceId: id,
       rpt: parsed.rpt,
       horses: parsed.horses,
+      judgment,
     });
   } catch (err) {
     console.error(err);
@@ -406,11 +430,13 @@ app.post('/api/fetch-browser', async (req, res) => {
           : '出馬表が含まれていません。URLとCookieを確認してください。';
       }
     }
+    const parsedPayloadB = parsed.ok ? { rpt: parsed.rpt, horses: parsed.horses } : null;
+    const judgmentB = parsed.ok ? buildJudgment(parsed.rpt, parsed.horses) : null;
     res.json({
       ok: true,
       html,
       length: html.length,
-      parsed: parsed.ok ? { rpt: parsed.rpt, horses: parsed.horses } : null,
+      parsed: parsedPayloadB ? { ...parsedPayloadB, judgment: judgmentB } : null,
       hint: hint || undefined,
       requestedUrl: url,
     });

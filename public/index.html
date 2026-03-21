@@ -29,6 +29,13 @@
     .parsed-table th { background: #f1f5f9; font-weight: 600; }
     .parsed-table td.num { text-align: right; }
     .rpt-badge { display: inline-block; background: #2563eb; color: #fff; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+    .judgment-block { margin-top: 16px; padding: 12px 14px; border-radius: 8px; border: 1px solid #cbd5e1; background: #fff; }
+    .judgment-block.judgment-buy { border-color: #86efac; background: #f0fdf4; }
+    .judgment-block.judgment-skip { border-color: #fecaca; background: #fef2f2; }
+    .judgment-verdict { font-size: 1rem; margin: 0 0 8px 0; }
+    .judgment-verdict .pattern { font-weight: 500; color: #64748b; margin-left: 8px; font-size: 0.875rem; }
+    .judgment-recommend { font-size: 0.875rem; margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 6px; line-height: 1.5; }
+    .judgment-lines { margin: 8px 0 0 0; padding: 10px; background: #1e293b; color: #e2e8f0; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
   </style>
 </head>
 <body>
@@ -95,6 +102,24 @@
     let dateVenueItems = [];
     let currentRaces = [];
     let sessionHasSaved = false;
+
+    /** API の judgment をHTML化 */
+    function formatJudgmentHtml(j) {
+      if (!j) return '';
+      var cls = j.verdict === '買い' ? 'judgment-buy' : 'judgment-skip';
+      var html = '<div class="judgment-block ' + cls + '">';
+      html += '<p class="judgment-verdict"><strong>' + escapeHtml(j.verdict || '') + '</strong>';
+      if (j.pattern) html += '<span class="pattern">パターン ' + escapeHtml(String(j.pattern)) + '</span>';
+      html += '</p>';
+      if (j.recommend) {
+        html += '<p class="judgment-recommend"><strong>推奨券種</strong><br>' + escapeHtml(j.recommend) + '</p>';
+      }
+      if (j.lines && j.lines.length) {
+        html += '<pre class="judgment-lines">' + escapeHtml(j.lines.join('\n')) + '</pre>';
+      }
+      html += '</div>';
+      return html;
+    }
 
     function showResult(ok, message, detail) {
       resultEl.className = 'result ' + (ok ? 'success' : 'error');
@@ -309,6 +334,7 @@
           if (data.ok) {
             let detail = '<p class="meta">race_id=' + data.raceId + ' の出馬表（RPT・馬番・BB指数・単勝オッズ）</p>';
             if (data.rpt != null) detail += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(data.rpt)) + '</span></p>';
+            detail += formatJudgmentHtml(data.judgment);
             detail += '<table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB指数</th><th class="num">単勝オッズ</th></tr></thead><tbody>';
             (data.horses || []).forEach(function (h) {
               detail += '<tr><td>' + escapeHtml(String(h.horseNumber)) + '</td><td class="num">' + (h.bb != null ? escapeHtml(String(h.bb)) : '—') + '</td><td class="num">' + (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') + '</td></tr>';
@@ -377,6 +403,7 @@
             if (data.parsed.rpt != null) {
               detail += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(data.parsed.rpt)) + '</span></p>';
             }
+            detail += formatJudgmentHtml(data.parsed.judgment);
             detail += '<table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB指数</th><th class="num">単勝オッズ</th></tr></thead><tbody>';
             data.parsed.horses.forEach(function(h) {
               detail += '<tr><td>' + escapeHtml(String(h.horseNumber)) + '</td><td class="num">' + (h.bb != null ? escapeHtml(String(h.bb)) : '—') + '</td><td class="num">' + (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') + '</td></tr>';
