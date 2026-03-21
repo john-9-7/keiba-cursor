@@ -19,8 +19,14 @@ const {
 const { enrichMissingRptFromAnalyzePages } = require('./lib/enrichRaceListRpt');
 const { pickDashboardRacesFromListHtml } = require('./lib/dashboardPicks');
 const { judgeRace } = require('./lib/judgment');
+const {
+  appendSnapshot,
+  appendResult,
+  getAccumulatorStatus,
+} = require('./lib/raceAccumulator');
 
 const DASHBOARD_FETCH_CONCURRENCY = 5;
+const ACCUMULATE_FETCH_CONCURRENCY = 4;
 
 /** パース済み馬行から判定オブジェクトを生成（API用） */
 function buildJudgment(rpt, horses) {
@@ -310,6 +316,256 @@ app.post('/api/race-list', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
+  }
+});
+
+/**
+ * GET /api/accumulate/status
+ * 蓄積ファイルの件数と保存パス（サーバー上の絶対パス）を返す。
+ */
+app.get('/api/accumulate/status', (req, res) => {
+  try {
+    res.json({ ok: true, ...getAccumulatorStatus() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/accumulate/bulk-venue
+ * 指定日付・会場のレース一覧（通常12R）を取得し、各レースの出馬表・判定を data/accumulated/snapshots.jsonl に追記する。
+ * Body: { "cookie"?: "...", "cookiePurpose"?: "archive"|"live", "date": "2026-03-15", "venue": "中山" }
+ */
+app.post('/api/accumulate/bulk-venue', async (req, res) => {
+  const { cookie, date, venue } = req.body || {};
+  if (!date || !venue || typeof date !== 'string' || typeof venue !== 'string') {
+    return res.status(400).json({ ok: false, error: 'date と venue を指定してください（例: date=2026-03-15, venue=中山）。' });
+  }
+  const purposeForCookie =
+    req.body?.cookiePurpose === 'live' || req.body?.cookiePurpose === 'archive'
+      ? req.body.cookiePurpose
+      : 'archive';
+  const cookieStr = resolveKeibaCookie(cookie, purposeForCookie);
+  const listHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    Referer: 'https://web.keibacluster.com/top/race-list',
+  };
+  if (cookieStr) listHeaders.Cookie = cookieStr;
+  const analyzeHeaders = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    Referer: 'https://web.keibacluster.com/top/race-analyze-next',
+    Cookie: cookieStr || '',
+  };
+
+  try {
+    if (!cookieStr) {
+      return res.status(400).json({
+        ok: false,
+        error: '競馬クラスターの Cookie がありません。',
+        hint: '過去開催なら analyze ページで「過去・DB用として保存」するか、cookiePurpose=archive で送信してください。',
+      });
+    }
+
+    const response = await fetch(RACE_LIST_URL, { method: 'GET', headers: listHeaders, redirect: 'follow' });
+    if (!response.ok) {
+      return res.status(200).json({ ok: false, error: `レース一覧: HTTP ${response.status}` });
+    }
+    const html = await response.text();
+    const isTopPage =
+      /競馬クラスターWeb|β版/.test(html) &&
+      /中央競馬.*南関競馬|race-btn/.test(html.replace(/\s/g, '')) &&
+      !/race-container/.test(html);
+    if (isTopPage || html.length < 10000) {
+      return res.status(200).json({
+        ok: false,
+        error: 'トップページが返っています。Cookie を確認してください。',
+      });
+    }
+
+    const parsed = parseRaceList(html, date, venue);
+    if (!parsed.ok || !parsed.races || parsed.races.length === 0) {
+      return res.status(200).json({
+        ok: false,
+        error: parsed.error || 'その日付・会場のレースが一覧に見つかりませんでした。',
+        hint: '競馬クラスターでその開催を表示したうえで、日付は data-date と同じ表記（例: 2026-03-15）、会場名も一覧と同じ（中山・阪神など）にしてください。',
+      });
+    }
+
+    await enrichMissingRptFromAnalyzePages(parsed.races, cookieStr, 4);
+
+    const races = parsed.races;
+    const purpose = normalizePurpose(purposeForCookie);
+    const results = new Array(races.length);
+    let cursor = 0;
+
+    async function worker() {
+      for (;;) {
+        const i = cursor;
+        cursor += 1;
+        if (i >= races.length) return;
+        const row = races[i];
+        const raceId = row.raceId;
+        const url = `https://web.keibacluster.com/top/race-analyze?race_id=${raceId}`;
+        try {
+          const r = await fetch(url, { method: 'GET', headers: analyzeHeaders, redirect: 'follow' });
+          if (!r.ok) {
+            results[i] = { ok: false, raceId, error: `HTTP ${r.status}` };
+            continue;
+          }
+          const h = await r.text();
+          const pr = parseRacePage(h);
+          const badPage =
+            /競馬クラスターWeb|β版/.test(h) &&
+            /race-btn/.test(h.replace(/\s/g, '')) &&
+            !(pr.horses && pr.horses.length > 0);
+          if (badPage || !pr.horses || pr.horses.length === 0) {
+            results[i] = { ok: false, raceId, error: '出馬表を取得できませんでした。' };
+            continue;
+          }
+          const judgment = buildJudgment(pr.rpt, pr.horses);
+          const rptPage = pr.rpt != null ? pr.rpt : row.rpt;
+          const record = {
+            source: 'bulk-venue-day',
+            cookiePurpose: purpose,
+            meetingDate: date,
+            venue,
+            raceId,
+            raceIndex: i + 1,
+            startTime: row.startTime || null,
+            rptFromList: row.rpt != null ? row.rpt : null,
+            rpt: rptPage != null ? rptPage : null,
+            horses: pr.horses.map((x) => ({
+              horseNumber: x.horseNumber,
+              bb: x.bb,
+              winOdds: x.winOdds,
+            })),
+            judgment,
+          };
+          appendSnapshot(record);
+          results[i] = { ok: true, raceId, rpt: record.rpt };
+        } catch (e) {
+          results[i] = { ok: false, raceId, error: e.message || '取得エラー' };
+        }
+      }
+    }
+
+    const nW = Math.min(ACCUMULATE_FETCH_CONCURRENCY, races.length);
+    await Promise.all(Array.from({ length: nW }, () => worker()));
+
+    const saved = results.filter((x) => x && x.ok).length;
+    const failed = results.filter((x) => x && !x.ok);
+    res.json({
+      ok: true,
+      meetingDate: date,
+      venue,
+      total: races.length,
+      saved,
+      failed,
+      accumulator: getAccumulatorStatus(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: err.message || '一括蓄積に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/accumulate/save-race
+ * 1レースだけ取得して snapshots.jsonl に追記（今日のレースページからでも利用可）
+ * Body: { "cookie"?, "cookiePurpose"?, "raceId": number, "meetingDate"?, "venue"?, "note"? }
+ */
+app.post('/api/accumulate/save-race', async (req, res) => {
+  const { cookie, raceId, meetingDate, venue, note } = req.body || {};
+  const id = parseInt(raceId, 10);
+  if (Number.isNaN(id) || id < 1) {
+    return res.status(400).json({ ok: false, error: 'raceId を指定してください。' });
+  }
+  const purposeForCookie =
+    req.body?.cookiePurpose === 'live' || req.body?.cookiePurpose === 'archive'
+      ? req.body.cookiePurpose
+      : 'archive';
+  const cookieStr = resolveKeibaCookie(cookie, purposeForCookie);
+  const purpose = normalizePurpose(purposeForCookie);
+  const headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    Referer: 'https://web.keibacluster.com/top/race-analyze-next',
+  };
+  if (cookieStr) headers.Cookie = cookieStr;
+  const url = `https://web.keibacluster.com/top/race-analyze?race_id=${id}`;
+
+  try {
+    if (!cookieStr) {
+      return res.status(400).json({ ok: false, error: 'Cookie がありません。' });
+    }
+    const response = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
+    if (!response.ok) {
+      return res.status(200).json({ ok: false, error: `HTTP ${response.status}` });
+    }
+    const html = await response.text();
+    const parsed = parseRacePage(html);
+    const isTopPage =
+      /競馬クラスターWeb|β版/.test(html) &&
+      /race-btn/.test(html.replace(/\s/g, '')) &&
+      !(parsed.horses && parsed.horses.length > 0);
+    if (isTopPage || !parsed.horses || parsed.horses.length === 0) {
+      return res.status(200).json({ ok: false, error: '出馬表を取得できませんでした。' });
+    }
+    const judgment = buildJudgment(parsed.rpt, parsed.horses);
+    const record = {
+      source: 'single-race',
+      cookiePurpose: purpose,
+      meetingDate: meetingDate && String(meetingDate).trim() ? String(meetingDate).trim() : null,
+      venue: venue && String(venue).trim() ? String(venue).trim() : null,
+      raceId: id,
+      rpt: parsed.rpt != null ? parsed.rpt : null,
+      horses: parsed.horses.map((x) => ({
+        horseNumber: x.horseNumber,
+        bb: x.bb,
+        winOdds: x.winOdds,
+      })),
+      judgment,
+      note: note && String(note).trim() ? String(note).trim() : null,
+    };
+    appendSnapshot(record);
+    res.json({
+      ok: true,
+      raceId: id,
+      rpt: record.rpt,
+      judgment,
+      accumulator: getAccumulatorStatus(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: err.message || '保存に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/accumulate/result
+ * レース結果を results.jsonl に追記（後から RPT・判定と突合する用）
+ * Body: { "raceId": number, "first"?: number, "second"?: number, "third"?: number, "finishOrder"?: number[], "note"?: string }
+ */
+app.post('/api/accumulate/result', (req, res) => {
+  const { raceId, first, second, third, finishOrder, note } = req.body || {};
+  const id = parseInt(raceId, 10);
+  if (Number.isNaN(id) || id < 1) {
+    return res.status(400).json({ ok: false, error: 'raceId を指定してください。' });
+  }
+  try {
+    appendResult({
+      raceId: id,
+      first: first != null ? parseInt(first, 10) : undefined,
+      second: second != null ? parseInt(second, 10) : undefined,
+      third: third != null ? parseInt(third, 10) : undefined,
+      finishOrder: Array.isArray(finishOrder) ? finishOrder.map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)) : undefined,
+      note,
+    });
+    res.json({ ok: true, accumulator: getAccumulatorStatus() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || '記録に失敗しました。' });
   }
 });
 

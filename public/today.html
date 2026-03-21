@@ -45,6 +45,11 @@
     .judgment-verdict .pattern { font-weight: 500; color: #64748b; margin-left: 8px; font-size: 0.875rem; }
     .judgment-recommend { font-size: 0.875rem; margin: 10px 0; padding: 10px; background: rgba(255,255,255,0.7); border-radius: 6px; line-height: 1.5; }
     .judgment-lines { margin: 8px 0 0 0; padding: 10px; background: #1e293b; color: #e2e8f0; border-radius: 6px; font-size: 12px; white-space: pre-wrap; word-break: break-word; max-height: 320px; overflow-y: auto; }
+    .cookie-simple-banner { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; font-size: 0.875rem; color: #134e4a; line-height: 1.55; }
+    .cookie-simple-banner a { color: #0d9488; font-weight: 600; }
+    details.cookie-advanced { margin-bottom: 12px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 8px 12px 12px; background: #fafafa; }
+    details.cookie-advanced summary { cursor: pointer; font-weight: 600; color: #475569; font-size: 0.875rem; padding: 4px 0; }
+    details.cookie-advanced[open] summary { margin-bottom: 10px; }
   </style>
 </head>
 <body>
@@ -53,25 +58,15 @@
       <a href="/" style="color:#2563eb;text-decoration:none;font-weight:600">← トップに戻る</a>
       <span style="color:#cbd5e1">|</span>
       <a href="/analyze.html" style="color:#64748b;text-decoration:none">分析・データ蓄積</a>
+      <span style="color:#cbd5e1">|</span>
+      <a href="/today.html" style="color:#64748b;text-decoration:none" id="navTodaySimple">今日だけ表示</a>
     </nav>
     <h1>今日のレース（リアルタイム）</h1>
-    <p style="font-size: 0.875rem; color: #666; margin-bottom: 12px;">当日のオッズ・判定を追う画面です。Cookie を入れたあと <strong>「データ取得」</strong>で、会場ごとに今に近い発走のレースをまとめて表示します。<strong>保存・取得のラジオは「今日・リアルタイム用」</strong>がおすすめです。</p>
+    <p style="font-size: 0.875rem; color: #666; margin-bottom: 12px;">当日のオッズ・判定を追う画面です。Cookie を入れたあと <strong>「データ取得」</strong>で、会場ごとに今に近い発走のレースをまとめて表示します。<strong>通常は「今日用」だけ</strong>で足ります。過去開催用の切り替えは、下の「詳細」を開くか <a href="?purpose=archive">過去用も表示</a> してください。</p>
 
     <label for="cookie">Cookie</label>
     <textarea id="cookie" placeholder="開発者ツールなどでコピーした Cookie をそのまま貼り付けてください"></textarea>
     <p class="hint">値だけ貼っても <code>laravel_session=</code> を補完します。2行で貼ると 1行目＝laravel_session、2行目＝XSRF-TOKEN として扱います。F12 → アプリケーション → Cookie で各「値」をコピーして貼り付けてください。</p>
-
-    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#fafafa">
-      <legend style="font-size:0.8rem;color:#64748b;font-weight:600">「サーバーに保存」するときの用途</legend>
-      <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
-        <input type="radio" name="cookiePurposeSave" value="live" checked style="width:auto">
-        <span><strong>今日・リアルタイム</strong>で追う用</span>
-      </label>
-      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
-        <input type="radio" name="cookiePurposeSave" value="archive" style="width:auto">
-        <span><strong>過去開催・DB取り込み</strong>用</span>
-      </label>
-    </fieldset>
 
     <p style="margin-bottom:10px">
       <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
@@ -79,24 +74,50 @@
         <span><strong>保存済みの Cookie を使う</strong>（Cookie欄は空でOK・iPhone向け）</span>
       </label>
     </p>
-    <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#f8fafc">
-      <legend style="font-size:0.8rem;color:#64748b;font-weight:600">取得APIで使う保存済み</legend>
-      <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
-        <input type="radio" name="cookiePurposeUse" value="live" checked style="width:auto">
-        <span>今日・リアルタイム用</span>
-      </label>
-      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
-        <input type="radio" name="cookiePurposeUse" value="archive" style="width:auto">
-        <span>過去・DB用</span>
-      </label>
-    </fieldset>
+
+    <div id="cookieSimpleBanner" class="cookie-simple-banner" hidden>
+      <strong>今日の追跡モード</strong>では、保存・取得とも <strong>今日・リアルタイム用</strong>の Cookie だけ使います。過去開催用の切り替えは表示していません。<br>
+      <span style="font-size:0.8rem;color:#0f766e">過去の開催データをこのページで取りたいとき → <a href="?purpose=archive">「過去用も表示」に切り替え</a>　／　一括蓄積は <a href="/analyze.html">分析・データ蓄積</a></span>
+    </div>
+
+    <details id="cookieAdvanced" class="cookie-advanced">
+      <summary id="cookieAdvancedSummary">今日用・過去用の切り替え（通常は閉じたままでOK）</summary>
+
+      <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:12px;background:#fff">
+        <legend style="font-size:0.8rem;color:#64748b;font-weight:600">「サーバーに保存」するときの用途</legend>
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+          <input type="radio" name="cookiePurposeSave" value="live" checked style="width:auto">
+          <span><strong>今日・リアルタイム</strong>で追う用</span>
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+          <input type="radio" name="cookiePurposeSave" value="archive" style="width:auto">
+          <span><strong>過去開催・DB取り込み</strong>用</span>
+        </label>
+      </fieldset>
+
+      <fieldset style="border:1px solid #e5e7eb;border-radius:8px;padding:10px 12px;margin-bottom:10px;background:#f8fafc">
+        <legend style="font-size:0.8rem;color:#64748b;font-weight:600">取得APIで使う保存済み</legend>
+        <label style="display:inline-flex;align-items:center;gap:6px;margin-right:14px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+          <input type="radio" name="cookiePurposeUse" value="live" checked style="width:auto">
+          <span>今日・リアルタイム用</span>
+        </label>
+        <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:0.875rem">
+          <input type="radio" name="cookiePurposeUse" value="archive" style="width:auto">
+          <span>過去・DB用</span>
+        </label>
+      </fieldset>
+
+      <p style="margin-bottom:10px">
+        <button type="button" id="btnClearSessionArchive" class="btn-secondary">過去・DB用の保存を削除</button>
+      </p>
+      <p class="hint" style="margin-bottom:0;background:#eff6ff;padding:8px 10px;border-radius:6px;color:#1e40af">用途を分けると、<strong>当日の追跡用セッション</strong>と<strong>別日・過去カード用のセッション</strong>を同時にサーバーに置けます。Render ではファイルが消えるため、今日用は <code>KEIBA_COOKIE</code>、過去用は <code>KEIBA_COOKIE_ARCHIVE</code> の併用を推奨します。</p>
+    </details>
+
     <p id="sessionStatus" class="hint" style="margin-bottom:8px;line-height:1.5">セッション状態を確認中...</p>
     <p style="margin-bottom:16px">
       <button type="button" id="btnSaveSession">サーバーに Cookie を保存</button>
       <button type="button" id="btnClearSessionLive" class="btn-secondary">今日用の保存を削除</button>
-      <button type="button" id="btnClearSessionArchive" class="btn-secondary">過去・DB用の保存を削除</button>
     </p>
-    <p class="hint" style="margin-bottom:16px;background:#eff6ff;padding:8px 10px;border-radius:6px;color:#1e40af">用途を分けると、<strong>当日の追跡用セッション</strong>と<strong>別日・過去カード用のセッション</strong>を同時にサーバーに置けます。Render ではファイルが消えるため、今日用は <code>KEIBA_COOKIE</code>、過去用は <code>KEIBA_COOKIE_ARCHIVE</code> の併用を推奨します。</p>
 
     <section class="race-list-section" id="dashboardTop" style="margin-bottom: 24px;">
       <h2 style="font-size: 1rem; margin-bottom: 8px;">いまの注目レース（全会場・自動）</h2>
@@ -152,6 +173,17 @@
     const btnSaveSession = document.getElementById('btnSaveSession');
     const btnClearSessionLive = document.getElementById('btnClearSessionLive');
     const btnClearSessionArchive = document.getElementById('btnClearSessionArchive');
+    const cookieAdvancedEl = document.getElementById('cookieAdvanced');
+    const cookieSimpleBannerEl = document.getElementById('cookieSimpleBanner');
+
+    /** 通常の「今日のレース」表示では過去用ラジオを隠し、詳細を開くまで今日用固定 */
+    function isSimpleCookieMode() {
+      return new URLSearchParams(window.location.search).get('purpose') !== 'archive';
+    }
+
+    function cookieAdvancedOpen() {
+      return !!(cookieAdvancedEl && cookieAdvancedEl.open);
+    }
 
     // レース一覧フロー: 日付・会場のリスト（レース一覧取得後にセット）
     let dateVenueItems = [];
@@ -160,11 +192,13 @@
     let sessionArchiveOk = false;
 
     function getCookiePurposeUse() {
+      if (isSimpleCookieMode() && !cookieAdvancedOpen()) return 'live';
       var el = document.querySelector('input[name="cookiePurposeUse"]:checked');
       return el && el.value === 'archive' ? 'archive' : 'live';
     }
 
     function getCookiePurposeSave() {
+      if (isSimpleCookieMode() && !cookieAdvancedOpen()) return 'live';
       var el = document.querySelector('input[name="cookiePurposeSave"]:checked');
       return el && el.value === 'archive' ? 'archive' : 'live';
     }
@@ -249,6 +283,16 @@
         refreshSessionStatus();
       });
     });
+    document.querySelectorAll('input[name="cookiePurposeSave"]').forEach(function (el) {
+      el.addEventListener('change', function () {
+        refreshSessionStatus();
+      });
+    });
+    if (cookieAdvancedEl) {
+      cookieAdvancedEl.addEventListener('toggle', function () {
+        refreshSessionStatus();
+      });
+    }
 
     function effectiveCookieForRequest() {
       if (useSavedSessionEl.checked) {
@@ -281,17 +325,28 @@
         alert('先に Cookie を貼り付けてください。');
         return;
       }
+      var purposeSaving = getCookiePurposeSave();
       btnSaveSession.disabled = true;
       try {
         var res = await fetch('/api/keiba-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ cookie: c, cookiePurpose: getCookiePurposeSave() }),
+          body: JSON.stringify({ cookie: c, cookiePurpose: purposeSaving }),
           credentials: 'include',
         });
         var data = await res.json();
         if (data.ok) {
-          alert(data.message || '保存しました。取得時は「保存済みのどちらを使うか」で用途を選んでください。');
+          var msg = data.message;
+          if (!msg) {
+            if (purposeSaving === 'archive') {
+              msg = '過去・DB用として保存しました。';
+            } else if (isSimpleCookieMode() && !cookieAdvancedOpen()) {
+              msg = '今日・リアルタイム用として保存しました。';
+            } else {
+              msg = '保存しました。';
+            }
+          }
+          alert(msg);
           await refreshSessionStatus();
         } else {
           alert(data.error || '保存に失敗しました。');
@@ -332,12 +387,23 @@
 
     (function initFromQuery() {
       var q = new URLSearchParams(window.location.search).get('purpose');
-      if (q === 'archive') {
+      var archiveMode = q === 'archive';
+      if (cookieSimpleBannerEl) {
+        cookieSimpleBannerEl.hidden = archiveMode;
+      }
+      if (cookieAdvancedEl) {
+        cookieAdvancedEl.open = archiveMode;
+      }
+      if (archiveMode) {
         var u = document.querySelector('input[name="cookiePurposeUse"][value="archive"]');
         if (u) u.checked = true;
         var s = document.querySelector('input[name="cookiePurposeSave"][value="archive"]');
         if (s) s.checked = true;
+        var sum = document.getElementById('cookieAdvancedSummary');
+        if (sum) sum.textContent = '過去用モード: 今日用・過去用の切り替え（このブロック内）';
       }
+      var navSimple = document.getElementById('navTodaySimple');
+      if (navSimple) navSimple.style.display = archiveMode ? '' : 'none';
       refreshSessionStatus();
     })();
 

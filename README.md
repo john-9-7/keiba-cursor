@@ -4,11 +4,12 @@
 
 ## ドキュメント
 
-- **[操作手順（操作手順.md）](docs/操作手順.md)** … サーバーの意味・起動・Cookie取得・取得実行・再起動の手順（初心者向け）
+- **[操作手順（操作手順.md）](docs/操作手順.md)** … **本番サーバー**での使い方（URL・環境変数・取得・トラブル）。手元PCでの起動は付録に記載
 - **[仕様書（SPEC.md）](docs/SPEC.md)** … 機能要件・判定ロジック・出力フォーマット・データソース等の定義
 - **[次のステップ（NEXT_STEPS.md）](docs/NEXT_STEPS.md)** … 開発の進め方・おすすめの順番
 - **[技術選定（TECH_STACK.md）](docs/TECH_STACK.md)** … 採用技術とプロジェクト構成
 - **[スクレイピング技術仕様（SCRAPING_SPEC.md）](docs/SCRAPING_SPEC.md)** … 競馬クラスターのCookie・race-list/race-analyze の構造とパース仕様
+- **[データ蓄積（ACCUMULATOR.md）](docs/ACCUMULATOR.md)** … `data/accumulated/` の JSONL 保存先と API（会場別一括蓄積・結果突合）
 
 ## 主な機能（予定）
 

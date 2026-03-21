@@ -28,6 +28,10 @@
     .cta { display: inline-block; margin-top: 12px; padding: 12px 18px; background: #2563eb; color: #fff !important; text-decoration: none; border-radius: 8px; font-weight: 600; font-size: 0.9rem; }
     .cta:hover { background: #1d4ed8; }
     .soon { background: #fef3c7; color: #92400e; padding: 10px 12px; border-radius: 8px; font-size: 0.85rem; margin-top: 12px; }
+    input[type="text"], select { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 8px; font-size: 14px; }
+    #accStatus { font-size: 0.8rem; color: #475569; margin: 10px 0; line-height: 1.5; word-break: break-all; }
+    .row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+    code.path { font-size: 0.75rem; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
   </style>
 </head>
 <body>
@@ -62,10 +66,42 @@
     </div>
 
     <div class="panel">
-      <h2>レースデータの取得</h2>
-      <p style="font-size:0.875rem;color:#64748b;margin:0;line-height:1.55">データ取得・一覧・判定の機能は「今日のレース」と同じです。次のボタンから開くと、<strong>取得で使う Cookie が「過去・DB用」に自動で切り替わった状態</strong>で始まります。</p>
+      <h2>どこに溜まるか（保存先）</h2>
+      <p style="font-size:0.875rem;color:#334155;margin:0;line-height:1.6">
+        ツールが動いている<strong>サーバー内</strong>のフォルダ <strong><code class="path">data/accumulated/</code></strong> に保存されます（本番URLで使っているときはクラウド上。手元PCで <code class="path">npm start</code> のときはそのPCのプロジェクト内）。
+      </p>
+      <ul style="font-size:0.85rem;color:#475569;line-height:1.6;margin:10px 0 0 1rem">
+        <li><code class="path">snapshots.jsonl</code> … 各レースの RPT・馬柱・判定など（1行＝1レース・追記のみ）</li>
+        <li><code class="path">results.jsonl</code> … 後から着順を足すとき用（API <code>/api/accumulate/result</code>）</li>
+      </ul>
+      <p class="hint" style="margin-bottom:0">詳細は <code>docs/ACCUMULATOR.md</code>。バックアップはフォルダごとコピーしてください（<code>.jsonl</code> は Git に含まれません）。</p>
+    </div>
+
+    <div class="panel">
+      <h2>会場の全レースを一括で蓄積（〜12R）</h2>
+      <p class="hint" style="margin-top:0">上で<strong>過去・DB用 Cookie</strong>を保存したうえで、競馬クラスターのレース一覧に出る<strong>日付</strong>と<strong>会場名</strong>をそのまま入力します。</p>
+      <p id="accStatus">蓄積件数を読み込み中...</p>
+      <label for="accVenueSelect">開催を一覧から選ぶ（任意）</label>
+      <select id="accVenueSelect">
+        <option value="">— 先に「一覧を取得」を押す —</option>
+      </select>
+      <div class="row-btns">
+        <button type="button" id="btnLoadVenues">レース一覧から日付・会場を取得</button>
+      </div>
+      <label for="accDate" style="margin-top:14px">日付（例: 2026-03-15）</label>
+      <input type="text" id="accDate" placeholder="2026-03-15" autocomplete="off">
+      <label for="accVenue">会場（例: 中山）</label>
+      <input type="text" id="accVenue" placeholder="中山" autocomplete="off">
+      <div class="row-btns">
+        <button type="button" id="btnBulkAccumulate">この日付・会場の全レースを snapshots に保存</button>
+      </div>
+      <div class="soon" style="margin-top:14px"><strong>結果との突合：</strong> レース後は <code>/api/accumulate/result</code> で race_id と着順を記録するか、JSONL を Excel 等に取り込んで分析してください（画面からの入力フォームは今後追加可能です）。</div>
+    </div>
+
+    <div class="panel">
+      <h2>レースデータの取得（1レースずつ）</h2>
+      <p style="font-size:0.875rem;color:#64748b;margin:0;line-height:1.55">データ取得・一覧・判定は「今日のレース」と同じです。次のボタンから開くと、<strong>取得で使う Cookie が「過去・DB用」</strong>に切り替わった状態で始まります。</p>
       <a class="cta" href="/today.html?purpose=archive">今日のレースページを開く（過去・DB用モード）</a>
-      <div class="soon"><strong>今後の予定：</strong> 取得結果を自動でDBに溜める・結果CSVと突合して回収率を出す機能を追加予定です。</div>
     </div>
   </div>
 
@@ -74,6 +110,12 @@
     const sessionStatusEl = document.getElementById('sessionStatus');
     const btnSaveArchive = document.getElementById('btnSaveArchive');
     const btnClearArchive = document.getElementById('btnClearArchive');
+    const accStatusEl = document.getElementById('accStatus');
+    const accDateEl = document.getElementById('accDate');
+    const accVenueEl = document.getElementById('accVenue');
+    const accVenueSelect = document.getElementById('accVenueSelect');
+    const btnLoadVenues = document.getElementById('btnLoadVenues');
+    const btnBulkAccumulate = document.getElementById('btnBulkAccumulate');
 
     async function refreshStatus() {
       try {
@@ -143,7 +185,107 @@
       }
     });
 
+    async function refreshAccStatus() {
+      if (!accStatusEl) return;
+      try {
+        var res = await fetch('/api/accumulate/status', { credentials: 'include' });
+        var data = await res.json();
+        if (data.ok) {
+          accStatusEl.innerHTML =
+            'スナップショット: <strong>' + data.snapshotsCount + '</strong> 件 · 結果メモ: <strong>' + data.resultsCount + '</strong> 件<br>' +
+            '<span style="color:#94a3b8;font-size:0.75rem">保存先: ' + (data.snapshotsPath || '') + '</span>';
+        } else {
+          accStatusEl.textContent = '蓄積状態を取得できませんでした。';
+        }
+      } catch (e) {
+        accStatusEl.textContent = '蓄積状態を取得できませんでした。';
+      }
+    }
+
+    if (btnLoadVenues) {
+      btnLoadVenues.addEventListener('click', async function () {
+        btnLoadVenues.disabled = true;
+        try {
+          var res = await fetch('/api/race-list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookiePurpose: 'archive' }),
+            credentials: 'include',
+          });
+          var data = await res.json();
+          if (!data.ok) {
+            alert(data.error || '一覧の取得に失敗しました。Cookie を確認してください。');
+            return;
+          }
+          if (!data.datesAndVenues || !data.datesAndVenues.length) {
+            alert('日付・会場が取得できませんでした。');
+            return;
+          }
+          accVenueSelect.innerHTML = '<option value="">— 選んでください —</option>';
+          data.datesAndVenues.forEach(function (item) {
+            var opt = document.createElement('option');
+            var v = item.date + '\t' + item.venue;
+            opt.value = v;
+            opt.textContent = item.date + ' · ' + item.venue;
+            accVenueSelect.appendChild(opt);
+          });
+        } catch (e) {
+          alert('通信エラー: ' + e.message);
+        } finally {
+          btnLoadVenues.disabled = false;
+        }
+      });
+    }
+
+    if (accVenueSelect) {
+      accVenueSelect.addEventListener('change', function () {
+        var v = accVenueSelect.value;
+        if (!v) return;
+        var parts = v.split('\t');
+        if (parts.length >= 2) {
+          accDateEl.value = parts[0];
+          accVenueEl.value = parts[1];
+        }
+      });
+    }
+
+    if (btnBulkAccumulate) {
+      btnBulkAccumulate.addEventListener('click', async function () {
+        var d = accDateEl.value.trim();
+        var v = accVenueEl.value.trim();
+        if (!d || !v) {
+          alert('日付と会場を入力するか、一覧から選んでください。');
+          return;
+        }
+        if (!confirm('「' + d + ' ' + v + '」の全レースを取得し、snapshots.jsonl に追記します。数分かかることがあります。よろしいですか？')) return;
+        btnBulkAccumulate.disabled = true;
+        try {
+          var res = await fetch('/api/accumulate/bulk-venue', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ date: d, venue: v, cookiePurpose: 'archive' }),
+            credentials: 'include',
+          });
+          var data = await res.json();
+          if (data.ok) {
+            var msg = '保存: ' + data.saved + ' / ' + data.total + ' レース';
+            if (data.failed && data.failed.length) msg += '\n失敗: ' + data.failed.length + '（race_id はコンソールログで確認）';
+            alert(msg);
+            console.log(data);
+            await refreshAccStatus();
+          } else {
+            alert(data.error || data.hint || '失敗しました。');
+          }
+        } catch (e) {
+          alert('通信エラー: ' + e.message);
+        } finally {
+          btnBulkAccumulate.disabled = false;
+        }
+      });
+    }
+
     refreshStatus();
+    refreshAccStatus();
   </script>
 </body>
 </html>

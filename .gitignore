@@ -5,3 +5,5 @@ node_modules/
 data/keiba-session.txt
 data/keiba-session-live.txt
 data/keiba-session-archive.txt
+# 分析用に溜めたレーススナップ（バックアップは各自でコピー推奨）
+data/accumulated/*.jsonl
