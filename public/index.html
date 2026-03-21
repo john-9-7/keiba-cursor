@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>競馬予想ツール</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #f5f5f5; }
+    .container { max-width: 640px; margin: 0 auto; }
+    h1 { font-size: 1.25rem; margin-bottom: 16px; color: #333; }
+    label { display: block; font-size: 0.875rem; font-weight: 600; margin-bottom: 4px; color: #555; }
+    textarea, input[type="url"] { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    textarea { min-height: 100px; resize: vertical; }
+    input[type="url"] { margin-bottom: 12px; }
+    .hint { font-size: 0.75rem; color: #888; margin-top: 4px; margin-bottom: 12px; }
+    button { background: #2563eb; color: #fff; border: none; padding: 10px 20px; border-radius: 6px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    .result { margin-top: 20px; padding: 12px; border-radius: 6px; font-size: 14px; }
+    .result.success { background: #dcfce7; color: #166534; }
+    .result.error { background: #fee2e2; color: #991b1b; }
+    .result pre { background: #1e293b; color: #e2e8f0; padding: 12px; border-radius: 6px; overflow-x: auto; font-size: 12px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+    .meta { font-size: 0.875rem; color: #64748b; margin-top: 8px; }
+    .parsed-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 14px; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+    .parsed-table th, .parsed-table td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e5e7eb; }
+    .parsed-table th { background: #f1f5f9; font-weight: 600; }
+    .parsed-table td.num { text-align: right; }
+    .rpt-badge { display: inline-block; background: #2563eb; color: #fff; padding: 4px 10px; border-radius: 6px; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>競馬予想ツール</h1>
+    <p style="font-size: 0.875rem; color: #666; margin-bottom: 12px;">ブラウザで競馬クラスターにログインし、Cookie を入力してください。URLを調べずに<strong>レース一覧から選んで</strong>出馬表を取得できます。</p>
+
+    <label for="cookie">Cookie</label>
+    <textarea id="cookie" placeholder="開発者ツールなどでコピーした Cookie をそのまま貼り付けてください"></textarea>
+    <p class="hint">値だけ貼っても <code>laravel_session=</code> を補完します。2行で貼ると 1行目＝laravel_session、2行目＝XSRF-TOKEN として扱います。F12 → アプリケーション → Cookie で各「値」をコピーして貼り付けてください。</p>
+
+    <section class="race-list-section" style="margin-bottom: 24px;">
+      <h2 style="font-size: 1rem; margin-bottom: 8px;">レース一覧から選ぶ（URL不要）</h2>
+      <button type="button" id="btnRaceList">レース一覧を取得</button>
+      <div id="raceListResult" style="margin-top: 12px;"></div>
+      <div id="raceListRaces" style="margin-top: 12px;"></div>
+    </section>
+
+    <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;">
+    <h2 style="font-size: 1rem; margin-bottom: 8px;">URLを指定して取得（従来の方法）</h2>
+    <label for="url">データページのURL</label>
+    <input type="url" id="url" placeholder="https://web.keibacluster.com/top/race-analyze?race_id=361645">
+    <p class="hint">必ず <code>?race_id=数字</code> が含まれるURLにしてください。出馬表を表示した状態で、レースを<strong>右クリック→「新しいタブで開く」</strong>または<strong>中ボタン（ホイール）クリック</strong>で開くと、アドレスバーに race_id 付きのURLが出ます。それをコピーしてください。</p>
+
+    <p style="margin-bottom:8px">
+      <label style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="useBrowser" style="width:auto">
+        <span>ブラウザで取得</span>
+      </label>
+      <span class="hint" style="display:inline;margin-left:4px">（Cookie が効かずトップが返るときに使用）</span>
+    </p>
+    <button type="button" id="btnFetch">取得</button>
+
+    <div id="result"></div>
+  </div>
+
+  <script>
+    const cookieEl = document.getElementById('cookie');
+    const urlEl = document.getElementById('url');
+    const btnFetch = document.getElementById('btnFetch');
+    const resultEl = document.getElementById('result');
+    const btnRaceList = document.getElementById('btnRaceList');
+    const raceListResult = document.getElementById('raceListResult');
+    const raceListRaces = document.getElementById('raceListRaces');
+
+    // レース一覧フロー: 日付・会場のリスト（レース一覧取得後にセット）
+    let dateVenueItems = [];
+    let currentRaces = [];
+
+    function showResult(ok, message, detail) {
+      resultEl.className = 'result ' + (ok ? 'success' : 'error');
+      let html = '<p>' + message + '</p>';
+      if (detail) html += detail;
+      resultEl.innerHTML = html;
+    }
+
+    // ---------- レース一覧から選ぶ ----------
+    btnRaceList.addEventListener('click', async () => {
+      const cookie = cookieEl.value.trim();
+      if (!cookie) {
+        raceListResult.innerHTML = '<p class="result error">Cookie を入力してください。</p>';
+        return;
+      }
+      btnRaceList.disabled = true;
+      raceListResult.innerHTML = '<p>取得中...</p>';
+      raceListRaces.innerHTML = '';
+      try {
+        const res = await fetch('/api/race-list', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie }),
+        });
+        const data = await res.json();
+        if (data.ok && data.datesAndVenues && data.datesAndVenues.length > 0) {
+          dateVenueItems = data.datesAndVenues;
+          let html = '<p class="result success">日付・会場を取得しました。下で選択して「レース一覧を表示」を押してください。</p>';
+          html += '<p style="margin-top:10px"><label>日付・会場 <select id="dateVenueSelect" style="padding:6px 10px;margin-left:6px">';
+          dateVenueItems.forEach(function (item, i) {
+            html += '<option value="' + i + '">' + escapeHtml(item.date + ' ' + item.venue) + '</option>';
+          });
+          html += '</select></label> <button type="button" id="btnShowRaces">レース一覧を表示</button></p>';
+          raceListResult.innerHTML = html;
+          document.getElementById('btnShowRaces').onclick = showRacesForDateVenue;
+        } else {
+          raceListResult.innerHTML = '<p class="result error">' + escapeHtml(data.error || '取得に失敗しました。') + '</p>';
+        }
+      } catch (e) {
+        raceListResult.innerHTML = '<p class="result error">通信エラー: ' + escapeHtml(e.message) + '</p>';
+      } finally {
+        btnRaceList.disabled = false;
+      }
+    });
+
+    function showRacesForDateVenue() {
+      const sel = document.getElementById('dateVenueSelect');
+      if (!sel || dateVenueItems.length === 0) return;
+      const idx = parseInt(sel.value, 10);
+      const item = dateVenueItems[idx];
+      if (!item) return;
+      const cookie = cookieEl.value.trim();
+      raceListRaces.innerHTML = '<p>レース一覧を取得中...</p>';
+      fetch('/api/race-list', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookie, date: item.date, venue: item.venue }),
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok && data.races && data.races.length > 0) {
+            currentRaces = data.races;
+            let html = '<p class="meta">' + item.date + ' ' + item.venue + ' のレース一覧</p>';
+            html += '<table class="parsed-table"><thead><tr><th>レース</th><th>RPT</th><th>発走</th><th></th></tr></thead><tbody>';
+            data.races.forEach(function (r, i) {
+              html += '<tr><td>R' + (i + 1) + '</td><td>' + (r.rpt != null ? r.rpt : '—') + '</td><td>' + (r.startTime || '—') + '</td><td><button type="button" class="btn-detail" data-race-id="' + r.raceId + '">詳細取得</button></td></tr>';
+            });
+            html += '</tbody></table>';
+            raceListRaces.innerHTML = html;
+            raceListRaces.querySelectorAll('.btn-detail').forEach(function (btn) {
+              btn.onclick = function () { fetchRaceDetail(parseInt(btn.getAttribute('data-race-id'), 10)); };
+            });
+          } else {
+            raceListRaces.innerHTML = '<p class="result error">' + escapeHtml(data.error || 'レースがありません。') + '</p>';
+          }
+        })
+        .catch(function (e) {
+          raceListRaces.innerHTML = '<p class="result error">通信エラー: ' + escapeHtml(e.message) + '</p>';
+        });
+    }
+
+    function fetchRaceDetail(raceId) {
+      const cookie = cookieEl.value.trim();
+      resultEl.innerHTML = '<p>詳細取得中...</p>';
+      resultEl.className = 'result';
+      fetch('/api/fetch-race', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cookie, raceId }),
+      })
+        .then(function (r) { return r.text(); })
+        .then(function (text) {
+          let data;
+          try { data = JSON.parse(text); } catch (err) {
+            showResult(false, 'サーバーがJSONではなくHTMLを返しました。', null);
+            return;
+          }
+          if (data.ok) {
+            let detail = '<p class="meta">race_id=' + data.raceId + ' の出馬表（RPT・馬番・BB指数・単勝オッズ）</p>';
+            if (data.rpt != null) detail += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(data.rpt)) + '</span></p>';
+            detail += '<table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB指数</th><th class="num">単勝オッズ</th></tr></thead><tbody>';
+            (data.horses || []).forEach(function (h) {
+              detail += '<tr><td>' + escapeHtml(String(h.horseNumber)) + '</td><td class="num">' + (h.bb != null ? escapeHtml(String(h.bb)) : '—') + '</td><td class="num">' + (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') + '</td></tr>';
+            });
+            detail += '</tbody></table>';
+            showResult(true, '詳細を取得しました。', detail);
+          } else {
+            showResult(false, data.error || '取得に失敗しました。', data.hint ? '<p class="meta">' + escapeHtml(data.hint) + '</p>' : null);
+          }
+        })
+        .catch(function (e) {
+          showResult(false, '通信エラー: ' + e.message);
+        });
+    }
+
+    btnFetch.addEventListener('click', async () => {
+      const cookie = cookieEl.value.trim();
+      const url = urlEl.value.trim();
+      const useBrowser = document.getElementById('useBrowser').checked;
+      if (!url) {
+        showResult(false, 'データページのURLを入力してください。');
+        return;
+      }
+      if (url.indexOf('race-analyze') === -1) {
+        showResult(false, 'URLに「race-analyze」が含まれていません。出馬表を表示したうえで、レースを「新しいタブで開く」などして race_id 付きのURLをコピーしてください。');
+        return;
+      }
+      if (url.indexOf('race_id=') === -1) {
+        showResult(false, 'URLに「?race_id=数字」が含まれていません。race-analyze-next のままでは取得できません。レースを右クリック→「新しいタブで開く」で開くと、アドレスバーに ?race_id=... が表示されます。そのURLをコピーしてください。');
+        return;
+      }
+
+      btnFetch.disabled = true;
+      resultEl.innerHTML = '<p>' + (useBrowser ? 'ブラウザで取得中（十数秒かかることがあります）...' : '取得中...') + '</p>';
+      resultEl.className = 'result';
+
+      try {
+        const endpoint = useBrowser ? '/api/fetch-browser' : '/api/fetch';
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cookie, url }),
+        });
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch (parseErr) {
+          showResult(false, 'サーバーがJSONではなくHTMLを返しました。サーバー側でエラーが起きている可能性があります。', '<p class="meta">先頭500文字:</p><pre style="background:#1e293b;color:#e2e8f0;padding:8px;font-size:11px;max-height:120px;overflow:auto">' + escapeHtml(text.slice(0, 500)) + '</pre>');
+          btnFetch.disabled = false;
+          return;
+        }
+
+        if (data.ok) {
+          let detail = '';
+          if (data.parsed && data.parsed.horses && data.parsed.horses.length > 0) {
+            detail += '<p class="meta">RPT・馬番・BB指数・単勝オッズを抽出しました。</p>';
+            if (data.parsed.rpt != null) {
+              detail += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(data.parsed.rpt)) + '</span></p>';
+            }
+            detail += '<table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB指数</th><th class="num">単勝オッズ</th></tr></thead><tbody>';
+            data.parsed.horses.forEach(function(h) {
+              detail += '<tr><td>' + escapeHtml(String(h.horseNumber)) + '</td><td class="num">' + (h.bb != null ? escapeHtml(String(h.bb)) : '—') + '</td><td class="num">' + (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') + '</td></tr>';
+            });
+            detail += '</tbody></table>';
+          } else {
+            if (data.hint) {
+              detail += '<p class="meta" style="background:#fef3c7;color:#92400e;padding:10px;border-radius:6px;margin-bottom:8px">' + escapeHtml(data.hint) + '</p>';
+              if (data.hint.indexOf('トップページ') !== -1) {
+                detail += '<p class="meta" style="background:#dbeafe;color:#1e40af;padding:10px;border-radius:6px;margin-bottom:8px"><strong>まだの場合</strong>：「ブラウザで取得」にチェックを入れて、もう一度「取得」を押してください。Cookie を出馬表表示中のタブでコピーし直すと改善することがあります。</p>';
+              }
+            }
+            detail += '<p class="meta">パースできませんでした。返ってきたHTMLの先頭を下で確認できます。</p>';
+            const preview = data.html.length > 3500 ? data.html.slice(0, 3500) + '\n... (省略)' : data.html;
+            detail += '<details style="margin-top:8px"><summary style="cursor:pointer;font-size:0.875rem">返ってきたHTMLの先頭を表示</summary><pre style="background:#1e293b;color:#e2e8f0;padding:12px;border-radius:6px;font-size:11px;max-height:280px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin-top:6px">' + escapeHtml(preview) + '</pre></details>';
+          }
+          detail += '<p class="meta" style="margin-top:12px">HTML文字数: ' + data.length.toLocaleString() + '</p>';
+          showResult(true, '取得しました。', detail);
+        } else {
+          let errMsg = data.error || '取得に失敗しました。';
+          if (data.hint) errMsg += ' — ' + data.hint;
+          showResult(false, errMsg);
+        }
+      } catch (e) {
+        showResult(false, '通信エラー: ' + e.message);
+      } finally {
+        btnFetch.disabled = false;
+      }
+    });
+
+    function escapeHtml(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+  </script>
+</body>
+</html>

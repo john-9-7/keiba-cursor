@@ -1,0 +1,21 @@
+{
+  "name": "keiba-cursor",
+  "version": "0.1.0",
+  "description": "競馬クラスター（RPT・BB指数）を利用した予想の分析・判断ツール",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "verify": "node scripts/verify-fetch.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": ["keiba", "競馬", "競馬クラスター", "RPT", "BB指数"],
+  "license": "MIT",
+  "dependencies": {
+    "cheerio": "^1.0.0",
+    "express": "^4.21.0",
+    "playwright": "^1.49.0"
+  }
+}
