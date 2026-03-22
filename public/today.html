@@ -431,13 +431,14 @@
         '<p class="meta" style="font-size:0.8rem">会場ごとに「今の時刻に最も近い発走」のレースを自動選択しています。中央・南関・地方など、一覧データにある全会場が対象です。</p>';
 
       var html = '';
-      (data.items || []).forEach(function (item) {
-        html += '<div class="dashboard-card">';
+      (data.items || []).forEach(function (item, idx) {
+        html += '<div class="dashboard-card" data-race-id="' + item.raceId + '" data-venue="' + escapeHtml(item.venue) + '" data-race-number="' + (item.raceNumber != null ? item.raceNumber : '') + '" data-start-time="' + escapeHtml(item.startTime || '') + '" data-delta-minutes="' + (item.deltaMinutes != null ? item.deltaMinutes : 0) + '" data-rpt="' + (item.rpt != null ? item.rpt : '') + '">';
         html += '<h3>' + escapeHtml(item.venue) + '</h3>';
         html += '<p class="meta">race_id ' + item.raceId;
         if (item.raceNumber != null) html += ' · 第' + item.raceNumber + 'レース';
         html += ' · 発走 ' + escapeHtml(item.startTime || '—') + ' · 時刻差 約' + item.deltaMinutes + '分</p>';
         if (item.rpt != null) html += '<p><span class="rpt-badge">RPT ' + escapeHtml(String(item.rpt)) + '</span></p>';
+        html += '<div class="dashboard-card-body">';
         if (item.ok) {
           html += formatJudgmentHtml(item.judgment);
           html +=
@@ -461,8 +462,9 @@
           html += '<p class="meta" style="margin-top:8px;color:#64748b">発走済みのためスキップ</p>';
         } else {
           html += '<p class="result error" style="margin-top:8px">' + escapeHtml(item.error || '取得失敗') + '</p>';
+          html += '<p class="meta"><button type="button" class="btn-retry-card" data-race-id="' + item.raceId + '">再取得</button></p>';
         }
-        html += '</div>';
+        html += '</div></div>';
       });
       dashboardCards.innerHTML = html;
       dashboardCards.querySelectorAll('.btn-open-bottom').forEach(function (btn) {
@@ -514,6 +516,46 @@
 
     btnDashboard.addEventListener('click', loadDashboard);
     btnDashboardRefresh.addEventListener('click', loadDashboard);
+
+    dashboardCards.addEventListener('click', function (ev) {
+      var btn = ev.target && ev.target.closest ? ev.target.closest('.btn-retry-card') : null;
+      if (!btn || btn.disabled) return;
+      var raceId = parseInt(btn.getAttribute('data-race-id'), 10);
+      var card = btn.closest('.dashboard-card');
+      var body = card ? card.querySelector('.dashboard-card-body') : null;
+      if (!body || !card) return;
+      btn.disabled = true;
+      btn.textContent = '取得中...';
+      fetch('/api/fetch-race', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Object.assign({}, cookieRequestBase(), { raceId: raceId })),
+        credentials: 'include',
+      })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (data.ok) {
+            var h = formatJudgmentHtml(data.judgment);
+            h += '<div class="horse-mini-wrap"><table class="parsed-table"><thead><tr><th>馬番</th><th class="num">BB</th><th class="num">単勝</th></tr></thead><tbody>';
+            (data.horses || []).forEach(function (horse) {
+              h += '<tr><td>' + escapeHtml(String(horse.horseNumber)) + '</td><td class="num">' + (horse.bb != null ? escapeHtml(String(horse.bb)) : '—') + '</td><td class="num">' + (horse.winOdds != null ? escapeHtml(String(horse.winOdds)) : '—') + '</td></tr>';
+            });
+            h += '</tbody></table></div><p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' + raceId + '">下のエリアに詳細を開く</button></p>';
+            body.innerHTML = h;
+            body.querySelector('.btn-open-bottom').onclick = function () {
+              fetchRaceDetail(raceId);
+              try { resultEl.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) {}
+            };
+          } else {
+            body.innerHTML = '<p class="result error" style="margin-top:8px">' + escapeHtml(data.error || '取得失敗') + '</p><p class="meta"><button type="button" class="btn-retry-card" data-race-id="' + raceId + '">再取得</button></p>';
+          }
+        })
+        .catch(function (e) {
+          btn.disabled = false;
+          btn.textContent = '再取得';
+          body.innerHTML = '<p class="result error" style="margin-top:8px">' + escapeHtml(e.message || '通信エラー') + '</p><p class="meta"><button type="button" class="btn-retry-card" data-race-id="' + raceId + '">再取得</button></p>';
+        });
+    });
 
     // ---------- レース一覧から選ぶ ----------
     btnRaceList.addEventListener('click', async () => {
