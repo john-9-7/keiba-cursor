@@ -87,6 +87,16 @@
       <p class="hint" style="margin-bottom:0">詳細は <code>docs/ACCUMULATOR.md</code>。バックアップはフォルダごとコピーしてください（<code>.jsonl</code> は Git に含まれません）。</p>
     </div>
 
+    <div class="panel" style="border:2px solid #a78bfa;background:#faf5ff">
+      <h2>一覧の全会場・全レースを一気に取り込む（超一括）</h2>
+      <p class="hint" style="margin-top:0">レース一覧ページに <strong>その Cookie で表示されている</strong> すべての「日付×会場」について、各会場の全レースを<strong>順に</strong>蓄積します。手動で会場を選ぶ必要はありません。</p>
+      <label for="accBulkAllDate">日付で絞る（任意・空欄＝一覧に出ている開催すべて）</label>
+      <input type="text" id="accBulkAllDate" placeholder="例: 2026-03-22（空欄で全日程）" autocomplete="off" style="max-width:100%">
+      <p class="hint">例: 開催が1日だけなら空欄でOK。複数日が一覧に混ざるときは、<strong>1日分だけ取りたい日付</strong>を入れるとその日の会場だけ処理します。</p>
+      <button type="button" id="btnBulkAllList" class="btn-acc-primary" style="background:#7c3aed;margin-top:8px">全会場まとめて蓄積する</button>
+      <p class="hint" style="margin-bottom:0"><strong>注意：</strong>会場数×レース数だけAPIを叩くため<strong>数分〜十数分以上</strong>かかります。<strong>Render の無料枠</strong>など HTTP タイムアウトが短いと<strong>途中で切れる</strong>ことがあります。そのときは Render の timeout 延長、または下の「1会場ずつ（①〜④）」を利用してください。</p>
+    </div>
+
     <div class="panel">
       <h2>会場の全レースを一括で蓄積（〜12R）</h2>
       <p class="hint" style="margin-top:0">次の <strong>①→②→③→④</strong> の順で進めます。日付・会場は競馬クラスターのレース一覧と<strong>同じ表記</strong>にしてください。</p>
@@ -155,6 +165,8 @@
     const accVenueSelect = document.getElementById('accVenueSelect');
     const btnLoadVenues = document.getElementById('btnLoadVenues');
     const btnBulkAccumulate = document.getElementById('btnBulkAccumulate');
+    const accBulkAllDateEl = document.getElementById('accBulkAllDate');
+    const btnBulkAllList = document.getElementById('btnBulkAllList');
 
     async function refreshStatus() {
       try {
@@ -284,6 +296,52 @@
         if (parts.length >= 2) {
           accDateEl.value = parts[0];
           accVenueEl.value = parts[1];
+        }
+      });
+    }
+
+    if (btnBulkAllList) {
+      btnBulkAllList.addEventListener('click', async function () {
+        var dateOnly = accBulkAllDateEl && accBulkAllDateEl.value.trim() ? accBulkAllDateEl.value.trim() : '';
+        var msg =
+          'レース一覧に表示されている' +
+          (dateOnly ? '「' + dateOnly + '」の' : '**すべての日付・会場**の') +
+          '各レースを順に蓄積します。時間がかかり、ホスティングによってはタイムアウトで失敗することがあります。続行しますか？';
+        if (!confirm(msg.replace(/\*\*/g, ''))) return;
+        btnBulkAllList.disabled = true;
+        try {
+          var body = { cookiePurpose: 'archive' };
+          if (dateOnly) body.date = dateOnly;
+          var res = await fetch('/api/accumulate/bulk-all-list', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            credentials: 'include',
+          });
+          var data = await res.json();
+          if (data.ok) {
+            var s =
+              '会場ブロック: ' +
+              data.venueBlocks +
+              ' · レース合計: ' +
+              data.totalRaces +
+              ' · 保存: ' +
+              data.totalSaved +
+              ' · 失敗: ' +
+              data.totalFailed +
+              '\n所要時間(目安): ' +
+              Math.round((data.durationMs || 0) / 1000) +
+              '秒';
+            alert(s + '\n\n詳細はコンソール（F12）を参照。');
+            console.log(data);
+            await refreshAccStatus();
+          } else {
+            alert(data.error || data.hint || '失敗しました。');
+          }
+        } catch (e) {
+          alert('通信エラー: ' + e.message);
+        } finally {
+          btnBulkAllList.disabled = false;
         }
       });
     }

@@ -23,6 +23,7 @@
 - `GET /api/accumulate/merged?limit=100` … 末尾 N 件のスナップショットに `results.jsonl` を `race_id` で突合した配列
 - `GET /api/accumulate/stats?limit=300` … 上記と同様の範囲で **RPT別件数・買い/見送り・結果紐づき・「BB最高馬が1着」** などの集計
 - `POST /api/accumulate/bulk-venue` … `date`, `venue`, `cookie`（省略可＝保存済み）, `cookiePurpose`（省略時は `archive`）
+- `POST /api/accumulate/bulk-all-list` … レース一覧HTMLから **日付×会場のすべて** を順に蓄積（各会場の全レース）。`date` を省略すると一覧に出ている開催すべて。`date` を指定するとその日付の会場だけ。**処理が長い**ためホスティングの **HTTP タイムアウト**に注意
 - `POST /api/accumulate/save-race` … 1レースだけ `raceId` で取得して追記
 - `POST /api/accumulate/result` … `raceId` + 着順などを `results.jsonl` に追記（同一 `race_id` で複数行ある場合、突合では **recordedAt が最新**の行を使用）
 
