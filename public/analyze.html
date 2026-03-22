@@ -32,6 +32,14 @@
     #accStatus { font-size: 0.8rem; color: #475569; margin: 10px 0; line-height: 1.5; word-break: break-all; }
     .row-btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
     code.path { font-size: 0.75rem; background: #f1f5f9; padding: 2px 6px; border-radius: 4px; }
+    .acc-flow { margin: 0; padding: 0; list-style: none; }
+    .acc-flow > li { display: flex; gap: 12px; align-items: flex-start; margin-bottom: 18px; padding-bottom: 16px; border-bottom: 1px solid #e2e8f0; }
+    .acc-flow > li:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .acc-step-no { flex-shrink: 0; width: 28px; height: 28px; border-radius: 50%; background: #0d9488; color: #fff; font-weight: 700; font-size: 0.875rem; display: flex; align-items: center; justify-content: center; }
+    .acc-step-body { flex: 1; min-width: 0; }
+    .acc-step-body > strong { display: block; font-size: 0.9rem; color: #0f172a; margin-bottom: 6px; }
+    .acc-step-body .hint { margin-top: 8px; margin-bottom: 0; }
+    button.btn-acc-primary { width: 100%; max-width: 100%; margin-top: 8px; }
   </style>
 </head>
 <body>
@@ -79,23 +87,52 @@
 
     <div class="panel">
       <h2>会場の全レースを一括で蓄積（〜12R）</h2>
-      <p class="hint" style="margin-top:0">上で<strong>過去・DB用 Cookie</strong>を保存したうえで、競馬クラスターのレース一覧に出る<strong>日付</strong>と<strong>会場名</strong>をそのまま入力します。</p>
+      <p class="hint" style="margin-top:0">次の <strong>①→②→③→④</strong> の順で進めます。日付・会場は競馬クラスターのレース一覧と<strong>同じ表記</strong>にしてください。</p>
       <p id="accStatus">蓄積件数を読み込み中...</p>
-      <label for="accVenueSelect">開催を一覧から選ぶ（任意）</label>
-      <select id="accVenueSelect">
-        <option value="">— 先に「一覧を取得」を押す —</option>
-      </select>
-      <div class="row-btns">
-        <button type="button" id="btnLoadVenues">レース一覧から日付・会場を取得</button>
-      </div>
-      <label for="accDate" style="margin-top:14px">日付（例: 2026-03-15）</label>
-      <input type="text" id="accDate" placeholder="2026-03-15" autocomplete="off">
-      <label for="accVenue">会場（例: 中山）</label>
-      <input type="text" id="accVenue" placeholder="中山" autocomplete="off">
-      <div class="row-btns">
-        <button type="button" id="btnBulkAccumulate">この日付・会場の全レースを snapshots に保存</button>
-      </div>
-      <div class="soon" style="margin-top:14px"><strong>結果との突合：</strong> レース後は <code>/api/accumulate/result</code> で race_id と着順を記録するか、JSONL を Excel 等に取り込んで分析してください（画面からの入力フォームは今後追加可能です）。</div>
+
+      <ol class="acc-flow" style="margin-top:14px">
+        <li>
+          <span class="acc-step-no" aria-hidden="true">1</span>
+          <div class="acc-step-body">
+            <strong>過去・DB用の Cookie を用意する</strong>
+            <span style="font-size:0.875rem;color:#475569">このページの<strong>上のパネル</strong>で「過去・DB用としてサーバーに保存」。Render なら <code>KEIBA_COOKIE_ARCHIVE</code> があれば保存は不要です。</span>
+          </div>
+        </li>
+        <li>
+          <span class="acc-step-no" aria-hidden="true">2</span>
+          <div class="acc-step-body">
+            <strong>開催の「一覧」を取り込む</strong>
+            <span style="font-size:0.875rem;color:#475569;display:block;margin-bottom:6px">競馬クラスターにログインした状態の Cookie で、日付・会場のリストをサーバーに取ります。</span>
+            <button type="button" id="btnLoadVenues" class="btn-acc-primary">② レース一覧を取得する</button>
+            <p class="hint">このボタン＝以前の「レース一覧から日付・会場を取得」と<strong>同じ操作</strong>です。</p>
+          </div>
+        </li>
+        <li>
+          <span class="acc-step-no" aria-hidden="true">3</span>
+          <div class="acc-step-body">
+            <strong>どの開催を蓄積するか決める</strong>
+            <label for="accVenueSelect" style="margin-top:10px">開催をリストから選ぶ（②のあと使えます）</label>
+            <select id="accVenueSelect">
+              <option value="">— ②の「レース一覧を取得する」を押すと、ここに開催が並びます —</option>
+            </select>
+            <p class="hint" style="margin-top:10px">リストを使わない場合は、下を手入力でもOKです。</p>
+            <label for="accDate" style="margin-top:10px">日付（例: 2026-03-15）</label>
+            <input type="text" id="accDate" placeholder="2026-03-15" autocomplete="off">
+            <label for="accVenue">会場（例: 中山）</label>
+            <input type="text" id="accVenue" placeholder="中山" autocomplete="off">
+          </div>
+        </li>
+        <li>
+          <span class="acc-step-no" aria-hidden="true">4</span>
+          <div class="acc-step-body">
+            <strong>全レースをファイルに保存する</strong>
+            <button type="button" id="btnBulkAccumulate" class="btn-acc-primary">④ この日付・会場の全レースを保存する</button>
+            <p class="hint">数分かかることがあります。<code>snapshots.jsonl</code> に追記されます。</p>
+          </div>
+        </li>
+      </ol>
+
+      <div class="soon" style="margin-top:16px"><strong>結果との突合：</strong> レース後は <code>/api/accumulate/result</code> で着順を記録するか、JSONL を Excel 等に取り込んで分析できます。</div>
     </div>
 
     <div class="panel">
@@ -221,7 +258,7 @@
             alert('日付・会場が取得できませんでした。');
             return;
           }
-          accVenueSelect.innerHTML = '<option value="">— 選んでください —</option>';
+          accVenueSelect.innerHTML = '<option value="">— 開催を選ぶ（または③の日付・会場を手入力）—</option>';
           data.datesAndVenues.forEach(function (item) {
             var opt = document.createElement('option');
             var v = item.date + '\t' + item.venue;
