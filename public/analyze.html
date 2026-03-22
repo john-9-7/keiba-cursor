@@ -94,7 +94,7 @@
       <input type="text" id="accBulkAllDate" placeholder="例: 2026-03-22（空欄で全日程）" autocomplete="off" style="max-width:100%">
       <p class="hint">例: 開催が1日だけなら空欄でOK。複数日が一覧に混ざるときは、<strong>1日分だけ取りたい日付</strong>を入れるとその日の会場だけ処理します。</p>
       <button type="button" id="btnBulkAllList" class="btn-acc-primary" style="background:#7c3aed;margin-top:8px">全会場まとめて蓄積する</button>
-      <p class="hint" style="margin-bottom:0"><strong>注意：</strong>会場数×レース数だけAPIを叩くため<strong>数分〜十数分以上</strong>かかります。<strong>Render の無料枠</strong>など HTTP タイムアウトが短いと<strong>途中で切れる</strong>ことがあります。そのときは Render の timeout 延長、または下の「1会場ずつ（①〜④）」を利用してください。</p>
+      <p class="hint" style="margin-bottom:0"><strong>注意：</strong>会場数×レース数だけAPIを叩くため<strong>数分〜十数分以上</strong>かかります。<strong>Render の無料枠</strong>など HTTP タイムアウトが短いと<strong>途中で切れる</strong>ことがあります。そのときは Render の timeout 延長、または下の「1会場ずつ（①〜④）」を利用してください。<br><strong>重複：</strong>同じ <code>race_id</code> は既に蓄積済みなら<strong>追記しません</strong>（再実行しても二重になりません）。</p>
     </div>
 
     <div class="panel">
@@ -325,8 +325,10 @@
               data.venueBlocks +
               ' · レース合計: ' +
               data.totalRaces +
-              ' · 保存: ' +
+              ' · 新規保存: ' +
               data.totalSaved +
+              ' · 重複スキップ: ' +
+              (data.totalSkippedDuplicates || 0) +
               ' · 失敗: ' +
               data.totalFailed +
               '\n所要時間(目安): ' +
@@ -365,7 +367,15 @@
           });
           var data = await res.json();
           if (data.ok) {
-            var msg = '保存: ' + data.saved + ' / ' + data.total + ' レース';
+            var msg =
+              '新規保存: ' +
+              data.saved +
+              ' / ' +
+              data.total +
+              ' レース';
+            if (data.skippedDuplicates > 0) {
+              msg += '\n重複スキップ（既に蓄積済みの race_id）: ' + data.skippedDuplicates;
+            }
             if (data.failed && data.failed.length) msg += '\n失敗: ' + data.failed.length + '（race_id はコンソールログで確認）';
             alert(msg);
             console.log(data);

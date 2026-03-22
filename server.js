@@ -303,6 +303,7 @@ async function runAccumulateVenueDay(p) {
       error: parsed.error || 'その日付・会場のレースが一覧に見つかりませんでした。',
       total: 0,
       saved: 0,
+      skippedDuplicates: 0,
       failed: [],
     };
   }
@@ -355,8 +356,12 @@ async function runAccumulateVenueDay(p) {
           })),
           judgment,
         };
-        appendSnapshot(record);
-        results[i] = { ok: true, raceId, rpt: record.rpt };
+        const snapOut = appendSnapshot(record);
+        if (snapOut.skipped) {
+          results[i] = { ok: true, raceId, skipped: true, rpt: record.rpt };
+        } else {
+          results[i] = { ok: true, raceId, skipped: false, rpt: record.rpt };
+        }
       } catch (e) {
         results[i] = { ok: false, raceId, error: e.message || '取得エラー' };
       }
@@ -366,9 +371,10 @@ async function runAccumulateVenueDay(p) {
   const nW = Math.min(ACCUMULATE_FETCH_CONCURRENCY, races.length);
   await Promise.all(Array.from({ length: nW }, () => worker()));
 
-  const saved = results.filter((x) => x && x.ok).length;
+  const saved = results.filter((x) => x && x.ok && !x.skipped).length;
+  const skippedDuplicates = results.filter((x) => x && x.ok && x.skipped).length;
   const failed = results.filter((x) => x && !x.ok).map((x) => ({ raceId: x.raceId, error: x.error || 'unknown' }));
-  return { ok: true, meetingDate: date, venue, total: races.length, saved, failed };
+  return { ok: true, meetingDate: date, venue, total: races.length, saved, skippedDuplicates, failed };
 }
 
 /**
@@ -548,6 +554,7 @@ app.post('/api/accumulate/bulk-venue', async (req, res) => {
       venue: out.venue,
       total: out.total,
       saved: out.saved,
+      skippedDuplicates: out.skippedDuplicates || 0,
       failed: out.failed,
       accumulator: getAccumulatorStatus(),
     });
@@ -632,6 +639,7 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
     /** @type {Array<Record<string, unknown>>} */
     const venues = [];
     let totalSaved = 0;
+    let totalSkippedDuplicates = 0;
     let totalFailed = 0;
     let totalRaces = 0;
 
@@ -645,8 +653,10 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
         snapshotSource: 'bulk-all-list',
       });
       const failedCount = out.failed ? out.failed.length : 0;
+      const skippedDup = out.skippedDuplicates || 0;
       if (out.ok) {
         totalSaved += out.saved;
+        totalSkippedDuplicates += skippedDup;
         totalFailed += failedCount;
         totalRaces += out.total;
       }
@@ -657,6 +667,7 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
         error: out.ok ? undefined : out.error,
         total: out.total,
         saved: out.saved,
+        skippedDuplicates: skippedDup,
         failedCount,
         failedSample: out.failed && out.failed.length ? out.failed.slice(0, 5) : [],
       });
@@ -670,6 +681,7 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
       venueBlocks: pairs.length,
       totalRaces,
       totalSaved,
+      totalSkippedDuplicates,
       totalFailed,
       durationMs,
       venues,
@@ -741,9 +753,21 @@ app.post('/api/accumulate/save-race', async (req, res) => {
       judgment,
       note: note && String(note).trim() ? String(note).trim() : null,
     };
-    appendSnapshot(record);
+    const snapOut = appendSnapshot(record);
+    if (snapOut.skipped) {
+      return res.json({
+        ok: true,
+        duplicate: true,
+        message: '同じ race_id は既に蓄積済みのため、追記しませんでした。',
+        raceId: id,
+        rpt: record.rpt,
+        judgment,
+        accumulator: getAccumulatorStatus(),
+      });
+    }
     res.json({
       ok: true,
+      duplicate: false,
       raceId: id,
       rpt: record.rpt,
       judgment,

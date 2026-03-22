@@ -59,7 +59,7 @@
     </nav>
 
     <h1>蓄積データの確認・結果入力</h1>
-    <p class="lead">蓄積したスナップショットと、後から入力した<strong>着順</strong>を突合して一覧・集計します。レース後は下のフォームで <strong>race_id</strong> と1〜3着馬番を登録してください。</p>
+    <p class="lead">蓄積したスナップショットと、後から入力した<strong>着順</strong>を突合します。<strong>BB指数の競技順位</strong>（そのレースの出馬表内で何位か）を1〜3着馬について表示します。レース後は <strong>race_id</strong> と1〜3着馬番を登録してください。</p>
 
     <div class="panel">
       <h2>集計（直近のスナップショットを対象）</h2>
@@ -118,6 +118,9 @@
               <th>判定</th>
               <th>BB最高馬</th>
               <th>1-2-3着</th>
+              <th>1着BB順</th>
+              <th>2着BB順</th>
+              <th>3着BB順</th>
               <th>BB最高=1着</th>
               <th>推奨（要約）</th>
             </tr>
@@ -178,6 +181,21 @@
         html += '<div class="stat-card"><div class="num">' + esc(s.bbTopFirstWhenBuy) + '</div><div class="lbl">そのうち<br>BB最高=1着</div></div>';
         html += '</div>';
         html += '<p class="hint">' + esc(s.legend) + '</p>';
+        function histTable(title, hist) {
+          if (!hist || typeof hist !== 'object') return '';
+          var ks = Object.keys(hist).sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
+          if (!ks.length) return '';
+          var t = '<p style="font-size:0.8rem;font-weight:600;margin:12px 0 6px">' + esc(title) + '</p>';
+          t += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>BB順位</th><th>件数</th></tr></thead><tbody>';
+          ks.forEach(function (k) {
+            t += '<tr><td>' + esc(k) + '位</td><td>' + hist[k] + '</td></tr>';
+          });
+          t += '</tbody></table></div>';
+          return t;
+        }
+        html += histTable('1着馬のBB順位の分布（結果あり・順位取得できたレース）', s.firstPlaceBbRankHistogram);
+        html += histTable('2着馬のBB順位の分布', s.secondPlaceBbRankHistogram);
+        html += histTable('3着馬のBB順位の分布', s.thirdPlaceBbRankHistogram);
         if (keys.length) {
           html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>BB最高=1着</th></tr></thead><tbody>';
           keys.forEach(function (k) {
@@ -212,7 +230,7 @@
       var err = document.getElementById('tableErr');
       err.style.display = 'none';
       if (!rows || !rows.length) {
-        tb.innerHTML = '<tr><td colspan="9" class="muted">データがありません。analyze で一括蓄積するか、しばらく待ってから再読み込みしてください。</td></tr>';
+        tb.innerHTML = '<tr><td colspan="12" class="muted">データがありません。analyze で一括蓄積するか、しばらく待ってから再読み込みしてください。</td></tr>';
         return;
       }
       var html = '';
@@ -226,6 +244,9 @@
         var v = r.verdict || '—';
         var vcls = v === '買い' ? 'tag-buy' : v === '見送り' ? 'tag-skip' : '';
         var bbMatch = r.bbTopIsFirst === true ? '○' : r.bbTopIsFirst === false ? '×' : '—';
+        var r1 = r.firstBbRank != null ? r.firstBbRank : '—';
+        var r2 = r.secondBbRank != null ? r.secondBbRank : '—';
+        var r3 = r.thirdBbRank != null ? r.thirdBbRank : '—';
         var rec = r.recommend ? String(r.recommend).replace(/\s+/g, ' ').slice(0, 80) : '';
         if (r.recommend && String(r.recommend).length > 80) rec += '…';
         html +=
@@ -245,6 +266,12 @@
           esc(r.topBbHorse != null ? r.topBbHorse : '—') +
           '</td><td>' +
           esc(place) +
+          '</td><td>' +
+          esc(r1) +
+          '</td><td>' +
+          esc(r2) +
+          '</td><td>' +
+          esc(r3) +
           '</td><td>' +
           bbMatch +
           '</td><td style="max-width:200px;word-break:break-all">' +
@@ -290,6 +317,9 @@
         'first',
         'second',
         'third',
+        'firstBbRank',
+        'secondBbRank',
+        'thirdBbRank',
         'bbTopIsFirst',
         'recommend',
       ];
@@ -311,6 +341,9 @@
             csvCell(res.first),
             csvCell(res.second),
             csvCell(res.third),
+            csvCell(r.firstBbRank),
+            csvCell(r.secondBbRank),
+            csvCell(r.thirdBbRank),
             csvCell(r.bbTopIsFirst),
             csvCell(rec),
           ].join(',')
