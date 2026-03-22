@@ -43,7 +43,9 @@ const DASHBOARD_FETCH_CONCURRENCY = (() => {
   return Math.min(n, 4);
 })();
 /** レース取得間の待機（ms）。サーバー負荷軽減・500 回避 */
-const DASHBOARD_FETCH_DELAY_MS = Math.min(Math.max(parseInt(process.env.DASHBOARD_FETCH_DELAY_MS || '500', 10), 200), 3000);
+const DASHBOARD_FETCH_DELAY_MS = Math.min(Math.max(parseInt(process.env.DASHBOARD_FETCH_DELAY_MS || '800', 10), 200), 3000);
+/** 一覧取得後、最初のレース取得前の待機（ms）。サーバーへの連打を避ける */
+const DASHBOARD_INITIAL_DELAY_MS = Math.min(Math.max(parseInt(process.env.DASHBOARD_INITIAL_DELAY_MS || '1200', 10), 0), 5000);
 const ACCUMULATE_FETCH_CONCURRENCY = (() => {
   const n = parseInt(process.env.ACCUMULATE_FETCH_CONCURRENCY || '3', 10);
   if (Number.isNaN(n) || n < 1) return 3;
@@ -960,7 +962,12 @@ app.post('/api/dashboard', async (req, res) => {
 
     const items = new Array(picks.length);
     let cursor = 0;
+    let fetchCount = 0;
     const nowMs = Date.now();
+
+    if (DASHBOARD_INITIAL_DELAY_MS > 0) {
+      await new Promise((r) => setTimeout(r, DASHBOARD_INITIAL_DELAY_MS));
+    }
 
     async function dashboardWorker() {
       for (;;) {
@@ -983,12 +990,15 @@ app.post('/api/dashboard', async (req, res) => {
             };
             continue;
           }
-          if (idx > 0 || DASHBOARD_FETCH_DELAY_MS > 0) {
+          if (fetchCount > 0 || DASHBOARD_FETCH_DELAY_MS > 0) {
             await new Promise((r) => setTimeout(r, DASHBOARD_FETCH_DELAY_MS));
           }
+          fetchCount += 1;
           const fr = await fetchRaceAnalyzeHtml(p.raceId, cookieStr, {
             maxAttempts: 4,
-            baseDelayMs: 900,
+            baseDelayMs: 1000,
+            timeoutMs: 18000,
+            referer: 'https://web.keibacluster.com/top/race-list',
           });
           if (!fr.ok || !fr.html) {
             items[idx] = {
