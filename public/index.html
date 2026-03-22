@@ -14,6 +14,9 @@
     @media (min-width: 560px) {
       .cards { grid-template-columns: 1fr 1fr; }
     }
+    @media (min-width: 900px) {
+      .cards.three { grid-template-columns: 1fr 1fr 1fr; }
+    }
     .card {
       display: block;
       background: #fff;
@@ -32,6 +35,9 @@
     .card-secondary h2 { color: #0f766e; }
     .card-secondary:hover { border-color: #14b8a6; }
     .card-secondary .go { color: #0d9488; }
+    .card-tertiary h2 { color: #7c3aed; }
+    .card-tertiary:hover { border-color: #a78bfa; }
+    .card-tertiary .go { color: #6d28d9; }
     footer { margin-top: 32px; font-size: 0.75rem; color: #94a3b8; text-align: center; }
   </style>
 </head>
@@ -40,7 +46,7 @@
     <h1>競馬予想ツール</h1>
     <p class="lead">やりたいことを選んでください。Cookie の貼り付けやデータ取得は、それぞれのページで手順どおり進められます。</p>
 
-    <div class="cards">
+    <div class="cards three">
       <a class="card" href="/today.html">
         <h2>今日のレースを追う</h2>
         <p>当日のレース一覧・オッズ・買い／見送り判定。データ取得・更新、レース一覧、URL指定での取得までこちらです。</p>
@@ -48,7 +54,12 @@
       </a>
       <a class="card card-secondary" href="/analyze.html">
         <h2>分析・データ蓄積</h2>
-        <p>過去開催用の Cookie の保存、あとからのDB取り込み・回収率分析の準備。まずは手順に沿ってセッションを分けます。</p>
+        <p>過去開催用の Cookie の保存、会場まとめてファイルに溜める。まずは手順に沿ってセッションを分けます。</p>
+        <p class="go">このページを開く →</p>
+      </a>
+      <a class="card card-tertiary" href="/accumulate-view.html">
+        <h2>蓄積データの確認・結果入力</h2>
+        <p>溜めたデータの一覧・CSV出力、着順の登録、RPT別の簡易集計（結果と突合）です。</p>
         <p class="go">このページを開く →</p>
       </a>
     </div>

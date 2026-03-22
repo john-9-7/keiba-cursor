@@ -23,6 +23,9 @@ const {
   appendSnapshot,
   appendResult,
   getAccumulatorStatus,
+  readRecentSnapshots,
+  getMergedRecent,
+  computeStatsFromMerged,
 } = require('./lib/raceAccumulator');
 
 const DASHBOARD_FETCH_CONCURRENCY = 5;
@@ -326,6 +329,49 @@ app.post('/api/race-list', async (req, res) => {
 app.get('/api/accumulate/status', (req, res) => {
   try {
     res.json({ ok: true, ...getAccumulatorStatus() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
+  }
+});
+
+/**
+ * GET /api/accumulate/recent?limit=50
+ * snapshots.jsonl の末尾 N 件（生データ・突合なし）
+ */
+app.get('/api/accumulate/recent', (req, res) => {
+  try {
+    const raw = Math.min(Math.max(parseInt(req.query.limit, 10) || 50, 1), 500);
+    const rows = readRecentSnapshots(raw);
+    res.json({ ok: true, limit: raw, count: rows.length, rows });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
+  }
+});
+
+/**
+ * GET /api/accumulate/merged?limit=100
+ * 末尾 N 件のスナップショットに results.jsonl を race_id で突合
+ */
+app.get('/api/accumulate/merged', (req, res) => {
+  try {
+    const raw = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const rows = getMergedRecent(raw);
+    res.json({ ok: true, limit: raw, count: rows.length, rows });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
+  }
+});
+
+/**
+ * GET /api/accumulate/stats?limit=300
+ * 末尾 N 件を突合したうえで RPT 別集計・簡易指標
+ */
+app.get('/api/accumulate/stats', (req, res) => {
+  try {
+    const raw = Math.min(Math.max(parseInt(req.query.limit, 10) || 300, 10), 2000);
+    const merged = getMergedRecent(raw);
+    const stats = computeStatsFromMerged(merged);
+    res.json({ ok: true, limitUsed: raw, stats });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
   }

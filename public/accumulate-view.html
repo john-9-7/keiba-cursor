@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>蓄積データの確認・結果入力 · 競馬予想ツール</title>
+  <style>
+    * { box-sizing: border-box; }
+    body { font-family: 'Segoe UI', sans-serif; margin: 0; padding: 16px; background: #f8fafc; min-height: 100vh; }
+    .container { max-width: 1100px; margin: 0 auto; }
+    nav { margin-bottom: 14px; padding: 10px 0; border-bottom: 1px solid #e2e8f0; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: 0.875rem; }
+    nav a { color: #2563eb; text-decoration: none; font-weight: 600; }
+    nav a.muted { color: #64748b; font-weight: 500; }
+    h1 { font-size: 1.25rem; margin: 0 0 8px 0; color: #0f172a; }
+    .lead { font-size: 0.875rem; color: #64748b; margin: 0 0 18px 0; line-height: 1.55; }
+    .panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+    .panel h2 { font-size: 1rem; margin: 0 0 12px 0; color: #0f172a; }
+    label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 4px; color: #374151; }
+    input[type="text"], input[type="number"], textarea { width: 100%; max-width: 320px; padding: 8px 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 14px; }
+    textarea { max-width: 100%; min-height: 56px; }
+    .hint { font-size: 0.75rem; color: #64748b; margin-top: 6px; margin-bottom: 12px; }
+    button { background: #0d9488; color: #fff; border: none; padding: 10px 16px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+    button:hover { background: #0f766e; }
+    button:disabled { background: #94a3b8; cursor: not-allowed; }
+    button.btn-secondary { background: #64748b; margin-left: 8px; }
+    button.btn-secondary:hover { background: #475569; }
+    button.btn-blue { background: #2563eb; }
+    button.btn-blue:hover { background: #1d4ed8; }
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .stat-card { background: #f1f5f9; border-radius: 8px; padding: 10px 12px; text-align: center; }
+    .stat-card .num { font-size: 1.35rem; font-weight: 700; color: #0f172a; }
+    .stat-card .lbl { font-size: 0.7rem; color: #64748b; margin-top: 4px; line-height: 1.3; }
+    .rpt-table-wrap { overflow-x: auto; margin-top: 10px; }
+    table.rpt-stats { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+    table.rpt-stats th, table.rpt-stats td { border: 1px solid #e5e7eb; padding: 6px 8px; text-align: right; }
+    table.rpt-stats th:first-child, table.rpt-stats td:first-child { text-align: left; }
+    table.rpt-stats th { background: #f8fafc; }
+    .data-table-wrap { overflow-x: auto; max-height: 480px; overflow-y: auto; border: 1px solid #e5e7eb; border-radius: 8px; }
+    table.data { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
+    table.data th, table.data td { border-bottom: 1px solid #f1f5f9; padding: 6px 8px; vertical-align: top; }
+    table.data th { position: sticky; top: 0; background: #fff; z-index: 1; text-align: left; }
+    .tag-buy { color: #166534; font-weight: 600; }
+    .tag-skip { color: #991b1b; font-weight: 600; }
+    .muted { color: #94a3b8; }
+    .row-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+    .err { color: #b91c1c; font-size: 0.875rem; }
+    .form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
+    .form-row > div { flex: 0 0 auto; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <nav>
+      <a href="/">← トップ</a>
+      <span style="color:#cbd5e1">|</span>
+      <a href="/analyze.html" class="muted">分析・データ蓄積</a>
+      <span style="color:#cbd5e1">|</span>
+      <a href="/today.html" class="muted">今日のレース</a>
+    </nav>
+
+    <h1>蓄積データの確認・結果入力</h1>
+    <p class="lead">蓄積したスナップショットと、後から入力した<strong>着順</strong>を突合して一覧・集計します。レース後は下のフォームで <strong>race_id</strong> と1〜3着馬番を登録してください。</p>
+
+    <div class="panel">
+      <h2>集計（直近のスナップショットを対象）</h2>
+      <p class="hint" style="margin-top:0">件数は末尾から最大500件（API指定）を突合した結果です。データが多いときは CSV で全体をExcelに出すのも有効です。</p>
+      <div id="statsArea"><p class="muted">読み込み中...</p></div>
+    </div>
+
+    <div class="panel">
+      <h2>結果を登録（1レースずつ）</h2>
+      <p class="hint" style="margin-top:0">一覧の <strong>race_id</strong> をコピーして入力。同じ race_id で再度送ると、<strong>新しい行が results に追記</strong>され、突合では<strong>最新</strong>が使われます。</p>
+      <div class="form-row">
+        <div>
+          <label for="inRaceId">race_id（数字）</label>
+          <input type="number" id="inRaceId" placeholder="例: 361645" min="1">
+        </div>
+        <div>
+          <label for="inFirst">1着馬番</label>
+          <input type="number" id="inFirst" placeholder="1〜18" min="1" max="18">
+        </div>
+        <div>
+          <label for="inSecond">2着馬番（任意）</label>
+          <input type="number" id="inSecond" min="1" max="18">
+        </div>
+        <div>
+          <label for="inThird">3着馬番（任意）</label>
+          <input type="number" id="inThird" min="1" max="18">
+        </div>
+      </div>
+      <label for="inOrder">着順まとめ（任意）カンマ区切り 例: 5,3,1,2</label>
+      <textarea id="inOrder" placeholder="全頭着順を入れると後から分析しやすいです"></textarea>
+      <label for="inNote">メモ（任意）</label>
+      <input type="text" id="inNote" style="max-width:100%" placeholder="例: 重馬場">
+      <p style="margin-top:12px">
+        <button type="button" id="btnSaveResult">結果を保存</button>
+      </p>
+      <p id="resultMsg" class="hint" style="margin-bottom:0"></p>
+    </div>
+
+    <div class="panel">
+      <h2>一覧（突合）</h2>
+      <div class="row-tools">
+        <button type="button" id="btnReload">再読み込み</button>
+        <button type="button" id="btnCsv" class="btn-blue">CSVダウンロード</button>
+        <span class="hint" style="margin:0">表示件数</span>
+        <input type="number" id="inLimit" value="150" min="10" max="500" style="width:72px">
+      </div>
+      <p id="tableErr" class="err" style="display:none"></p>
+      <div class="data-table-wrap">
+        <table class="data" id="tbl">
+          <thead>
+            <tr>
+              <th>保存日時</th>
+              <th>開催</th>
+              <th>race_id</th>
+              <th>RPT</th>
+              <th>判定</th>
+              <th>BB最高馬</th>
+              <th>1-2-3着</th>
+              <th>BB最高=1着</th>
+              <th>推奨（要約）</th>
+            </tr>
+          </thead>
+          <tbody id="tblBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    var mergedRows = [];
+
+    function esc(s) {
+      if (s == null || s === '') return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    function csvCell(v) {
+      var t = v == null ? '' : String(v);
+      if (/[",\n\r]/.test(t)) return '"' + t.replace(/"/g, '""') + '"';
+      return t;
+    }
+
+    function parseFinishOrder(str) {
+      if (!str || !String(str).trim()) return undefined;
+      return String(str)
+        .split(/[,、\s]+/)
+        .map(function (x) { return parseInt(x.trim(), 10); })
+        .filter(function (n) { return !isNaN(n) && n >= 1; });
+    }
+
+    async function loadStats() {
+      var el = document.getElementById('statsArea');
+      try {
+        var res = await fetch('/api/accumulate/stats?limit=500', { credentials: 'include' });
+        var data = await res.json();
+        if (!data.ok) {
+          el.innerHTML = '<p class="err">' + esc(data.error || '取得失敗') + '</p>';
+          return;
+        }
+        var s = data.stats;
+        var byRpt = s.byRpt || {};
+        var keys = Object.keys(byRpt).sort(function (a, b) {
+          var na = parseInt(a, 10);
+          var nb = parseInt(b, 10);
+          if (!isNaN(na) && !isNaN(nb)) return na - nb;
+          return a.localeCompare(b, 'ja');
+        });
+        var html = '<div class="stats-grid">';
+        html += '<div class="stat-card"><div class="num">' + esc(s.snapshotRows) + '</div><div class="lbl">表示対象<br>スナップショット</div></div>';
+        html += '<div class="stat-card"><div class="num">' + esc(s.linkedResultCount) + '</div><div class="lbl">結果が<br>紐づいた件数</div></div>';
+        html += '<div class="stat-card"><div class="num">' + esc(s.buyWithResult) + '</div><div class="lbl">買い判定かつ<br>結果あり</div></div>';
+        html += '<div class="stat-card"><div class="num">' + esc(s.bbTopFirstWhenBuy) + '</div><div class="lbl">そのうち<br>BB最高=1着</div></div>';
+        html += '</div>';
+        html += '<p class="hint">' + esc(s.legend) + '</p>';
+        if (keys.length) {
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>BB最高=1着</th></tr></thead><tbody>';
+          keys.forEach(function (k) {
+            var b = byRpt[k];
+            html +=
+              '<tr><td>' +
+              esc(k) +
+              '</td><td>' +
+              b.snapshots +
+              '</td><td>' +
+              b.withResult +
+              '</td><td>' +
+              b.buy +
+              '</td><td>' +
+              b.skip +
+              '</td><td>' +
+              b.buyWithResult +
+              '</td><td>' +
+              b.bbTopFirstWhenBuy +
+              '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+        }
+        el.innerHTML = html;
+      } catch (e) {
+        el.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
+      }
+    }
+
+    function renderTable(rows) {
+      var tb = document.getElementById('tblBody');
+      var err = document.getElementById('tableErr');
+      err.style.display = 'none';
+      if (!rows || !rows.length) {
+        tb.innerHTML = '<tr><td colspan="9" class="muted">データがありません。analyze で一括蓄積するか、しばらく待ってから再読み込みしてください。</td></tr>';
+        return;
+      }
+      var html = '';
+      for (var i = rows.length - 1; i >= 0; i--) {
+        var r = rows[i];
+        var res = r.result;
+        var place = '—';
+        if (res && (res.first != null || res.second != null || res.third != null)) {
+          place = [res.first, res.second, res.third].map(function (x) { return x != null ? x : '—'; }).join('-');
+        }
+        var v = r.verdict || '—';
+        var vcls = v === '買い' ? 'tag-buy' : v === '見送り' ? 'tag-skip' : '';
+        var bbMatch = r.bbTopIsFirst === true ? '○' : r.bbTopIsFirst === false ? '×' : '—';
+        var rec = r.recommend ? String(r.recommend).replace(/\s+/g, ' ').slice(0, 80) : '';
+        if (r.recommend && String(r.recommend).length > 80) rec += '…';
+        html +=
+          '<tr><td>' +
+          esc((r.savedAt || '').replace('T', ' ').slice(0, 19)) +
+          '</td><td>' +
+          esc([r.meetingDate, r.venue].filter(Boolean).join(' ') || '—') +
+          '</td><td>' +
+          esc(r.raceId) +
+          '</td><td>' +
+          esc(r.rpt != null ? r.rpt : '—') +
+          '</td><td class="' +
+          vcls +
+          '">' +
+          esc(v) +
+          '</td><td>' +
+          esc(r.topBbHorse != null ? r.topBbHorse : '—') +
+          '</td><td>' +
+          esc(place) +
+          '</td><td>' +
+          bbMatch +
+          '</td><td style="max-width:200px;word-break:break-all">' +
+          esc(rec) +
+          '</td></tr>';
+      }
+      tb.innerHTML = html;
+    }
+
+    async function loadMerged() {
+      var lim = parseInt(document.getElementById('inLimit').value, 10) || 150;
+      lim = Math.min(500, Math.max(10, lim));
+      var err = document.getElementById('tableErr');
+      err.style.display = 'none';
+      try {
+        var res = await fetch('/api/accumulate/merged?limit=' + lim, { credentials: 'include' });
+        var data = await res.json();
+        if (!data.ok) {
+          err.textContent = data.error || '取得に失敗しました。';
+          err.style.display = 'block';
+          mergedRows = [];
+          renderTable([]);
+          return;
+        }
+        mergedRows = data.rows || [];
+        renderTable(mergedRows);
+      } catch (e) {
+        err.textContent = e.message || '通信エラー';
+        err.style.display = 'block';
+      }
+    }
+
+    function downloadCsv() {
+      var headers = [
+        'savedAt',
+        'meetingDate',
+        'venue',
+        'raceId',
+        'rpt',
+        'verdict',
+        'pattern',
+        'topBbHorse',
+        'first',
+        'second',
+        'third',
+        'bbTopIsFirst',
+        'recommend',
+      ];
+      var lines = [headers.join(',')];
+      for (var i = 0; i < mergedRows.length; i++) {
+        var r = mergedRows[i];
+        var res = r.result || {};
+        var rec = r.recommend ? String(r.recommend).replace(/\r?\n/g, ' ') : '';
+        lines.push(
+          [
+            csvCell(r.savedAt),
+            csvCell(r.meetingDate),
+            csvCell(r.venue),
+            csvCell(r.raceId),
+            csvCell(r.rpt),
+            csvCell(r.verdict),
+            csvCell(r.pattern),
+            csvCell(r.topBbHorse),
+            csvCell(res.first),
+            csvCell(res.second),
+            csvCell(res.third),
+            csvCell(r.bbTopIsFirst),
+            csvCell(rec),
+          ].join(',')
+        );
+      }
+      var blob = new Blob(['\ufeff' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
+      var a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'accumulate-merged-' + new Date().toISOString().slice(0, 10) + '.csv';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+
+    document.getElementById('btnReload').addEventListener('click', function () {
+      loadStats();
+      loadMerged();
+    });
+    document.getElementById('btnCsv').addEventListener('click', downloadCsv);
+    document.getElementById('inLimit').addEventListener('change', loadMerged);
+
+    document.getElementById('btnSaveResult').addEventListener('click', async function () {
+      var msg = document.getElementById('resultMsg');
+      msg.textContent = '';
+      var raceId = parseInt(document.getElementById('inRaceId').value, 10);
+      if (isNaN(raceId) || raceId < 1) {
+        msg.textContent = 'race_id を入力してください。';
+        return;
+      }
+      var first = document.getElementById('inFirst').value.trim();
+      var second = document.getElementById('inSecond').value.trim();
+      var third = document.getElementById('inThird').value.trim();
+      var order = parseFinishOrder(document.getElementById('inOrder').value);
+      var note = document.getElementById('inNote').value.trim();
+      var body = { raceId: raceId };
+      if (first !== '') body.first = parseInt(first, 10);
+      if (second !== '') body.second = parseInt(second, 10);
+      if (third !== '') body.third = parseInt(third, 10);
+      if (order && order.length) body.finishOrder = order;
+      if (note) body.note = note;
+      var btn = document.getElementById('btnSaveResult');
+      btn.disabled = true;
+      try {
+        var res = await fetch('/api/accumulate/result', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify(body),
+        });
+        var data = await res.json();
+        if (data.ok) {
+          msg.textContent = '保存しました。一覧を更新します。';
+          document.getElementById('inFirst').value = '';
+          document.getElementById('inSecond').value = '';
+          document.getElementById('inThird').value = '';
+          document.getElementById('inOrder').value = '';
+          document.getElementById('inNote').value = '';
+          await loadStats();
+          await loadMerged();
+        } else {
+          msg.textContent = data.error || '失敗しました。';
+        }
+      } catch (e) {
+        msg.textContent = e.message || '通信エラー';
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    loadStats();
+    loadMerged();
+  </script>
+</body>
+</html>

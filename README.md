@@ -9,7 +9,7 @@
 - **[次のステップ（NEXT_STEPS.md）](docs/NEXT_STEPS.md)** … 開発の進め方・おすすめの順番
 - **[技術選定（TECH_STACK.md）](docs/TECH_STACK.md)** … 採用技術とプロジェクト構成
 - **[スクレイピング技術仕様（SCRAPING_SPEC.md）](docs/SCRAPING_SPEC.md)** … 競馬クラスターのCookie・race-list/race-analyze の構造とパース仕様
-- **[データ蓄積（ACCUMULATOR.md）](docs/ACCUMULATOR.md)** … `data/accumulated/` の JSONL 保存先と API（会場別一括蓄積・結果突合）
+- **[データ蓄積（ACCUMULATOR.md）](docs/ACCUMULATOR.md)** … `data/accumulated/` の JSONL、API、**`/accumulate-view.html`**（一覧・結果入力・CSV・集計）
 
 ## 主な機能（予定）
 
