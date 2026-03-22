@@ -27,9 +27,20 @@ const {
   getMergedRecent,
   computeStatsFromMerged,
 } = require('./lib/raceAccumulator');
+/** race-analyze 取得は蓄積ロジックと独立（lib/keibaAnalyzeFetch）。5xx 時はリトライ付き */
+const { fetchRaceAnalyzeHtml } = require('./lib/keibaAnalyzeFetch');
 
-const DASHBOARD_FETCH_CONCURRENCY = 5;
-const ACCUMULATE_FETCH_CONCURRENCY = 4;
+/** 同時取得数。クラウドIPで 500 が出やすいときは 1〜2 に下げる（環境変数 DASHBOARD_FETCH_CONCURRENCY） */
+const DASHBOARD_FETCH_CONCURRENCY = (() => {
+  const n = parseInt(process.env.DASHBOARD_FETCH_CONCURRENCY || '2', 10);
+  if (Number.isNaN(n) || n < 1) return 2;
+  return Math.min(n, 8);
+})();
+const ACCUMULATE_FETCH_CONCURRENCY = (() => {
+  const n = parseInt(process.env.ACCUMULATE_FETCH_CONCURRENCY || '3', 10);
+  if (Number.isNaN(n) || n < 1) return 3;
+  return Math.min(n, 8);
+})();
 
 /** パース済み馬行から判定オブジェクトを生成（API用） */
 function buildJudgment(rpt, horses) {
@@ -287,12 +298,6 @@ function validateRaceListHtml(html) {
 async function runAccumulateVenueDay(p) {
   const { listHtml, cookieStr, date, venue, purpose } = p;
   const snapshotSource = p.snapshotSource || 'bulk-venue-day';
-  const analyzeHeaders = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    Referer: 'https://web.keibacluster.com/top/race-analyze-next',
-    Cookie: cookieStr || '',
-  };
 
   const parsed = parseRaceList(listHtml, date, venue);
   if (!parsed.ok || !parsed.races || parsed.races.length === 0) {
@@ -320,14 +325,13 @@ async function runAccumulateVenueDay(p) {
       if (i >= races.length) return;
       const row = races[i];
       const raceId = row.raceId;
-      const url = `https://web.keibacluster.com/top/race-analyze?race_id=${raceId}`;
       try {
-        const r = await fetch(url, { method: 'GET', headers: analyzeHeaders, redirect: 'follow' });
-        if (!r.ok) {
-          results[i] = { ok: false, raceId, error: `HTTP ${r.status}` };
+        const fr = await fetchRaceAnalyzeHtml(raceId, cookieStr);
+        if (!fr.ok || !fr.html) {
+          results[i] = { ok: false, raceId, error: fr.error || `HTTP ${fr.status}` };
           continue;
         }
-        const h = await r.text();
+        const h = fr.html;
         const pr = parseRacePage(h);
         const badPage =
           /競馬クラスターWeb|β版/.test(h) &&
@@ -712,23 +716,16 @@ app.post('/api/accumulate/save-race', async (req, res) => {
       : 'archive';
   const cookieStr = resolveKeibaCookie(cookie, purposeForCookie);
   const purpose = normalizePurpose(purposeForCookie);
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    Referer: 'https://web.keibacluster.com/top/race-analyze-next',
-  };
-  if (cookieStr) headers.Cookie = cookieStr;
-  const url = `https://web.keibacluster.com/top/race-analyze?race_id=${id}`;
 
   try {
     if (!cookieStr) {
       return res.status(400).json({ ok: false, error: 'Cookie がありません。' });
     }
-    const response = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
-    if (!response.ok) {
-      return res.status(200).json({ ok: false, error: `HTTP ${response.status}` });
+    const fr = await fetchRaceAnalyzeHtml(id, cookieStr);
+    if (!fr.ok || !fr.html) {
+      return res.status(200).json({ ok: false, error: fr.error || `HTTP ${fr.status}` });
     }
-    const html = await response.text();
+    const html = fr.html;
     const parsed = parseRacePage(html);
     const isTopPage =
       /競馬クラスターWeb|β版/.test(html) &&
@@ -855,13 +852,6 @@ app.post('/api/dashboard', async (req, res) => {
       });
     }
 
-    const analyzeHeaders = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      Referer: 'https://web.keibacluster.com/top/race-analyze-next',
-      Cookie: cookieStr,
-    };
-
     const items = new Array(picks.length);
     let cursor = 0;
 
@@ -871,10 +861,9 @@ app.post('/api/dashboard', async (req, res) => {
         cursor += 1;
         if (idx >= picks.length) return;
         const p = picks[idx];
-        const url = `https://web.keibacluster.com/top/race-analyze?race_id=${p.raceId}`;
         try {
-          const r = await fetch(url, { method: 'GET', headers: analyzeHeaders, redirect: 'follow' });
-          if (!r.ok) {
+          const fr = await fetchRaceAnalyzeHtml(p.raceId, cookieStr);
+          if (!fr.ok || !fr.html) {
             items[idx] = {
               ok: false,
               venue: p.venue,
@@ -883,11 +872,11 @@ app.post('/api/dashboard', async (req, res) => {
               startTime: p.startTime,
               rpt: p.rpt,
               deltaMinutes: p.deltaMinutes,
-              error: `HTTP ${r.status}`,
+              error: fr.error || `HTTP ${fr.status}`,
             };
             continue;
           }
-          const h = await r.text();
+          const h = fr.html;
           const parsed = parseRacePage(h);
           const badPage =
             /競馬クラスターWeb|β版/.test(h) &&
@@ -906,7 +895,22 @@ app.post('/api/dashboard', async (req, res) => {
             };
             continue;
           }
-          const judgment = buildJudgment(parsed.rpt, parsed.horses);
+          let judgment;
+          try {
+            judgment = buildJudgment(parsed.rpt, parsed.horses);
+          } catch (jErr) {
+            items[idx] = {
+              ok: false,
+              venue: p.venue,
+              raceId: p.raceId,
+              raceNumber: p.raceNumber,
+              startTime: p.startTime,
+              rpt: p.rpt,
+              deltaMinutes: p.deltaMinutes,
+              error: `判定エラー: ${jErr.message || 'unknown'}`,
+            };
+            continue;
+          }
           items[idx] = {
             ok: true,
             venue: p.venue,
@@ -960,14 +964,7 @@ app.post('/api/fetch-race', async (req, res) => {
   if (Number.isNaN(id) || id < 1) {
     return res.status(400).json({ ok: false, error: 'raceId を指定してください。' });
   }
-  const url = `https://web.keibacluster.com/top/race-analyze?race_id=${id}`;
   const cookieStr = resolveKeibaCookie(cookie, req.body?.cookiePurpose);
-  const headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    'Referer': 'https://web.keibacluster.com/top/race-analyze-next',
-  };
-  if (cookieStr) headers['Cookie'] = cookieStr;
   try {
     if (!cookieStr) {
       return res.status(400).json({
@@ -977,11 +974,11 @@ app.post('/api/fetch-race', async (req, res) => {
       });
     }
 
-    const response = await fetch(url, { method: 'GET', headers, redirect: 'follow' });
-    if (!response.ok) {
-      return res.status(200).json({ ok: false, error: `HTTP ${response.status}` });
+    const fr = await fetchRaceAnalyzeHtml(id, cookieStr);
+    if (!fr.ok || !fr.html) {
+      return res.status(200).json({ ok: false, error: fr.error || `HTTP ${fr.status}` });
     }
-    const html = await response.text();
+    const html = fr.html;
     const parsed = parseRacePage(html);
     const isTopPage = /競馬クラスターWeb|β版/.test(html) && /race-btn/.test(html.replace(/\s/g, '')) && !(parsed.horses && parsed.horses.length > 0);
     if (isTopPage || !parsed.horses || parsed.horses.length === 0) {

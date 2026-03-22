@@ -10,6 +10,7 @@
 - **[技術選定（TECH_STACK.md）](docs/TECH_STACK.md)** … 採用技術とプロジェクト構成
 - **[スクレイピング技術仕様（SCRAPING_SPEC.md）](docs/SCRAPING_SPEC.md)** … 競馬クラスターのCookie・race-list/race-analyze の構造とパース仕様
 - **[データ蓄積（ACCUMULATOR.md）](docs/ACCUMULATOR.md)** … `data/accumulated/` の JSONL、API、**`/accumulate-view.html`**（一覧・結果入力・CSV・集計）
+- **[取得の安定性（NETWORK_FETCH.md）](docs/NETWORK_FETCH.md)** … `race-analyze` 取得の共通化・リトライ・`DASHBOARD_FETCH_CONCURRENCY`
 
 ## 主な機能（予定）
 
