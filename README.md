@@ -11,6 +11,7 @@
 - **[スクレイピング技術仕様（SCRAPING_SPEC.md）](docs/SCRAPING_SPEC.md)** … 競馬クラスターのCookie・race-list/race-analyze の構造とパース仕様
 - **[データ蓄積（ACCUMULATOR.md）](docs/ACCUMULATOR.md)** … `data/accumulated/` の JSONL、API、**`/accumulate-view.html`**（一覧・結果入力・**結果の自動取得（netkeiba）**・CSV・集計）
 - **[netkeiba 結果取得（NETKEIBA_RESULTS.md）](docs/NETKEIBA_RESULTS.md)** … 着順の自動取得の使い方・API・注意事項
+- **[直前オッズで再判定（ODDS_REJUDGE.md）](docs/ODDS_REJUDGE.md)** … RPT・BB キャッシュ ＋ テキスト入力オッズで再判定
 - **[取得の安定性（NETWORK_FETCH.md）](docs/NETWORK_FETCH.md)** … `race-analyze` 取得の共通化・リトライ・`DASHBOARD_FETCH_CONCURRENCY`
 
 ## 主な機能（予定）

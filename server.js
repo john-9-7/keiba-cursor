@@ -35,6 +35,7 @@ const {
   fetchRaceListForDate,
   fetchResultByRaceId,
 } = require('./lib/netkeibaResult');
+const { set: setRaceCache, get: getRaceCache } = require('./lib/raceCache');
 
 /** 同時取得数。500 対策で既定は 1（直列）。環境変数 DASHBOARD_FETCH_CONCURRENCY で 1〜4 に変更可 */
 const DASHBOARD_FETCH_CONCURRENCY = (() => {
@@ -1048,6 +1049,7 @@ app.post('/api/dashboard', async (req, res) => {
             };
             continue;
           }
+          setRaceCache(p.raceId, parsed.rpt, parsed.horses);
           items[idx] = {
             ok: true,
             venue: p.venue,
@@ -1126,6 +1128,7 @@ app.post('/api/fetch-race', async (req, res) => {
       });
     }
     const judgment = buildJudgment(parsed.rpt, parsed.horses);
+    setRaceCache(id, parsed.rpt, parsed.horses);
     res.json({
       ok: true,
       raceId: id,
@@ -1136,6 +1139,58 @@ app.post('/api/fetch-race', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/judge-with-odds
+ * キャッシュ済みの RPT・BB に直前オッズを渡して再判定
+ * Body: { "raceId": number, "oddsText": "4=3.2, 8=15.5, 1=4.1" } … 馬番=単勝オッズ、カンマ区切り
+ */
+app.post('/api/judge-with-odds', (req, res) => {
+  const { raceId, oddsText } = req.body || {};
+  const id = parseInt(raceId, 10);
+  if (Number.isNaN(id) || id < 1) {
+    return res.status(400).json({ ok: false, error: 'raceId を指定してください。' });
+  }
+  const cached = getRaceCache(id);
+  if (!cached) {
+    return res.status(404).json({
+      ok: false,
+      error: 'このレースの RPT・BB がキャッシュにありません。',
+      hint: '先に「データ取得」または「レース詳細の取得」で成功させてから、直前オッズを入力してください。',
+    });
+  }
+  const oddsMap = {};
+  const text = String(oddsText || '').trim();
+  if (text) {
+    for (const part of text.split(/[,，、\s]+/)) {
+      const m = part.match(/^(\d{1,2})\s*[=＝:]\s*([\d.]+)$/);
+      if (m) {
+        const num = parseInt(m[1], 10);
+        const o = parseFloat(m[2]);
+        if (num >= 1 && num <= 18 && !Number.isNaN(o) && o > 0) {
+          oddsMap[num] = o;
+        }
+      }
+    }
+  }
+  const horses = cached.horses.map((h) => ({
+    horseNumber: h.horseNumber,
+    bb: h.bb,
+    winOdds: oddsMap[h.horseNumber] ?? null,
+  }));
+  try {
+    const judgment = buildJudgment(cached.rpt, horses);
+    res.json({
+      ok: true,
+      raceId: id,
+      rpt: cached.rpt,
+      judgment,
+      horses: horses.map((h) => ({ horseNumber: h.horseNumber, bb: h.bb, winOdds: h.winOdds })),
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: err.message || '判定エラー' });
   }
 });
 

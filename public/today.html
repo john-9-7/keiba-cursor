@@ -129,6 +129,25 @@
       <div id="dashboardStatus" style="margin-top: 8px;"></div>
       <div id="dashboardCards" style="margin-top: 12px;"></div>
 
+      <details id="oddsRejudgeBlock" style="margin-top: 14px; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px 14px; background: #f8fafc;">
+        <summary style="cursor: pointer; font-weight: 600; font-size: 0.9rem;">直前オッズで再判定（RPT・BBはキャッシュ使用）</summary>
+        <p class="hint" style="margin-top: 10px;">取得済みの RPT・BB に、直前オッズだけ渡して再判定します。馬番=単勝オッズをカンマ区切りで入力。例: <code>4=3.2, 8=15.5, 1=4.1</code></p>
+        <div class="form-row" style="margin-top: 10px;">
+          <div>
+            <label for="oddsRejudgeRaceId">race_id</label>
+            <input type="number" id="oddsRejudgeRaceId" placeholder="例: 362023" min="1" style="width: 100px;">
+          </div>
+          <div style="flex: 1; min-width: 200px;">
+            <label for="oddsRejudgeText">馬番=オッズ（カンマ区切り）</label>
+            <input type="text" id="oddsRejudgeText" placeholder="4=3.2, 8=15.5, 1=4.1" style="width: 100%;">
+          </div>
+          <div style="align-self: flex-end;">
+            <button type="button" id="btnOddsRejudge">再判定</button>
+          </div>
+        </div>
+        <div id="oddsRejudgeResult" class="hint" style="margin-top: 10px;"></div>
+      </details>
+
       <details class="race-legacy">
         <summary>従来どおり：日付・会場を選んでレース一覧</summary>
         <p class="hint" style="margin-top: 10px;">一覧だけ見たい・別レースの詳細を取りたいとき用です。</p>
@@ -455,9 +474,7 @@
           });
           html += '</tbody></table></div>';
           html +=
-            '<p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' +
-            item.raceId +
-            '">下のエリアに詳細を開く</button></p>';
+            '<p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' + item.raceId + '">下のエリアに詳細を開く</button> <button type="button" class="btn-odds-rejudge" data-race-id="' + item.raceId + '">直前オッズで再判定</button></p>';
         } else if (item.skipped && item.error === '発走済み') {
           html += '<p class="meta" style="margin-top:8px;color:#64748b">発走済みのためスキップ</p>';
         } else {
@@ -517,6 +534,21 @@
     btnDashboard.addEventListener('click', loadDashboard);
     btnDashboardRefresh.addEventListener('click', loadDashboard);
 
+    document.addEventListener('click', function (ev) {
+      var oddsBtn = ev.target && ev.target.closest ? ev.target.closest('.btn-odds-rejudge') : null;
+      if (oddsBtn) {
+        var rid = oddsBtn.getAttribute('data-race-id');
+        var block = document.getElementById('oddsRejudgeBlock');
+        var ridEl = document.getElementById('oddsRejudgeRaceId');
+        var textEl = document.getElementById('oddsRejudgeText');
+        if (block && ridEl) {
+          block.open = true;
+          ridEl.value = rid || '';
+          if (textEl) textEl.focus();
+        }
+        return;
+      }
+    });
     dashboardCards.addEventListener('click', function (ev) {
       var btn = ev.target && ev.target.closest ? ev.target.closest('.btn-retry-card') : null;
       if (!btn || btn.disabled) return;
@@ -540,7 +572,7 @@
             (data.horses || []).forEach(function (horse) {
               h += '<tr><td>' + escapeHtml(String(horse.horseNumber)) + '</td><td class="num">' + (horse.bb != null ? escapeHtml(String(horse.bb)) : '—') + '</td><td class="num">' + (horse.winOdds != null ? escapeHtml(String(horse.winOdds)) : '—') + '</td></tr>';
             });
-            h += '</tbody></table></div><p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' + raceId + '">下のエリアに詳細を開く</button></p>';
+            h += '</tbody></table></div><p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' + raceId + '">下のエリアに詳細を開く</button> <button type="button" class="btn-odds-rejudge" data-race-id="' + raceId + '">直前オッズで再判定</button></p>';
             body.innerHTML = h;
             body.querySelector('.btn-open-bottom').onclick = function () {
               fetchRaceDetail(raceId);
@@ -556,6 +588,41 @@
           body.innerHTML = '<p class="result error" style="margin-top:8px">' + escapeHtml(e.message || '通信エラー') + '</p><p class="meta"><button type="button" class="btn-retry-card" data-race-id="' + raceId + '">再取得</button></p>';
         });
     });
+
+    (function setupOddsRejudge() {
+      var btn = document.getElementById('btnOddsRejudge');
+      var ridEl = document.getElementById('oddsRejudgeRaceId');
+      var textEl = document.getElementById('oddsRejudgeText');
+      var resultEl = document.getElementById('oddsRejudgeResult');
+      if (!btn || !ridEl || !textEl || !resultEl) return;
+      btn.addEventListener('click', function () {
+        var raceId = parseInt(ridEl.value, 10);
+        if (isNaN(raceId) || raceId < 1) {
+          resultEl.innerHTML = '<span class="err">race_id を入力してください。</span>';
+          return;
+        }
+        btn.disabled = true;
+        resultEl.innerHTML = '再判定中...';
+        fetch('/api/judge-with-odds', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ raceId: raceId, oddsText: textEl.value.trim() }),
+          credentials: 'include',
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (data) {
+            if (data.ok) {
+              resultEl.innerHTML = formatJudgmentHtml(data.judgment);
+            } else {
+              resultEl.innerHTML = '<span class="err">' + escapeHtml(data.error || 'エラー') + (data.hint ? '<br><span class="hint">' + escapeHtml(data.hint) + '</span>' : '') + '</span>';
+            }
+          })
+          .catch(function (e) {
+            resultEl.innerHTML = '<span class="err">' + escapeHtml(e.message || '通信エラー') + '</span>';
+          })
+          .finally(function () { btn.disabled = false; });
+      });
+    })();
 
     // ---------- レース一覧から選ぶ ----------
     btnRaceList.addEventListener('click', async () => {
@@ -673,7 +740,7 @@
             (data.horses || []).forEach(function (h) {
               detail += '<tr><td>' + escapeHtml(String(h.horseNumber)) + '</td><td class="num">' + (h.bb != null ? escapeHtml(String(h.bb)) : '—') + '</td><td class="num">' + (h.winOdds != null ? escapeHtml(String(h.winOdds)) : '—') + '</td></tr>';
             });
-            detail += '</tbody></table>';
+            detail += '</tbody></table><p class="meta" style="margin-top:10px"><button type="button" class="btn-odds-rejudge" data-race-id="' + data.raceId + '">直前オッズで再判定</button></p>';
             showResult(true, '詳細を取得しました。', detail);
             try { document.getElementById('result').scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e3) {}
           } else {
