@@ -457,6 +457,8 @@
             '<p class="meta"><button type="button" class="btn-open-bottom" data-race-id="' +
             item.raceId +
             '">下のエリアに詳細を開く</button></p>';
+        } else if (item.skipped && item.error === '発走済み') {
+          html += '<p class="meta" style="margin-top:8px;color:#64748b">発走済みのためスキップ</p>';
         } else {
           html += '<p class="result error" style="margin-top:8px">' + escapeHtml(item.error || '取得失敗') + '</p>';
         }

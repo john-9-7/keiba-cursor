@@ -17,7 +17,7 @@ const {
   normalizePurpose,
 } = require('./lib/keibaSession');
 const { enrichMissingRptFromAnalyzePages } = require('./lib/enrichRaceListRpt');
-const { pickDashboardRacesFromListHtml } = require('./lib/dashboardPicks');
+const { pickDashboardRacesFromListHtml, isPostTimePassed } = require('./lib/dashboardPicks');
 const { judgeRace } = require('./lib/judgment');
 const {
   appendSnapshot,
@@ -36,12 +36,14 @@ const {
   fetchResultByRaceId,
 } = require('./lib/netkeibaResult');
 
-/** 同時取得数。クラウドIPで 500 が出やすいときは 1〜2 に下げる（環境変数 DASHBOARD_FETCH_CONCURRENCY） */
+/** 同時取得数。500 対策で既定は 1（直列）。環境変数 DASHBOARD_FETCH_CONCURRENCY で 1〜4 に変更可 */
 const DASHBOARD_FETCH_CONCURRENCY = (() => {
-  const n = parseInt(process.env.DASHBOARD_FETCH_CONCURRENCY || '2', 10);
-  if (Number.isNaN(n) || n < 1) return 2;
-  return Math.min(n, 8);
+  const n = parseInt(process.env.DASHBOARD_FETCH_CONCURRENCY || '1', 10);
+  if (Number.isNaN(n) || n < 1) return 1;
+  return Math.min(n, 4);
 })();
+/** レース取得間の待機（ms）。サーバー負荷軽減・500 回避 */
+const DASHBOARD_FETCH_DELAY_MS = Math.min(Math.max(parseInt(process.env.DASHBOARD_FETCH_DELAY_MS || '500', 10), 200), 3000);
 const ACCUMULATE_FETCH_CONCURRENCY = (() => {
   const n = parseInt(process.env.ACCUMULATE_FETCH_CONCURRENCY || '3', 10);
   if (Number.isNaN(n) || n < 1) return 3;
@@ -958,6 +960,7 @@ app.post('/api/dashboard', async (req, res) => {
 
     const items = new Array(picks.length);
     let cursor = 0;
+    const nowMs = Date.now();
 
     async function dashboardWorker() {
       for (;;) {
@@ -966,7 +969,27 @@ app.post('/api/dashboard', async (req, res) => {
         if (idx >= picks.length) return;
         const p = picks[idx];
         try {
-          const fr = await fetchRaceAnalyzeHtml(p.raceId, cookieStr);
+          if (isPostTimePassed(dateNorm, p.startTime, nowMs)) {
+            items[idx] = {
+              ok: false,
+              venue: p.venue,
+              raceId: p.raceId,
+              raceNumber: p.raceNumber,
+              startTime: p.startTime,
+              rpt: p.rpt,
+              deltaMinutes: p.deltaMinutes,
+              skipped: true,
+              error: '発走済み',
+            };
+            continue;
+          }
+          if (idx > 0 || DASHBOARD_FETCH_DELAY_MS > 0) {
+            await new Promise((r) => setTimeout(r, DASHBOARD_FETCH_DELAY_MS));
+          }
+          const fr = await fetchRaceAnalyzeHtml(p.raceId, cookieStr, {
+            maxAttempts: 4,
+            baseDelayMs: 900,
+          });
           if (!fr.ok || !fr.html) {
             items[idx] = {
               ok: false,
