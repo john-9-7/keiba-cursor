@@ -1,0 +1,11 @@
+---
+description: コード変更後はユーザーに確認せず git commit / push まで進める
+alwaysApply: true
+---
+
+# Git（コミット・プッシュ）
+
+- このリポジトリで**意味のあるコード変更**をしたあとは、ユーザーに「コミットしますか」と**聞かずに**、可能ならその場で **`git add` → `git commit` → `git push`** まで実行する。
+- Cursor のターミナルで `git` が PATH に無い場合は、Windows では次を試す: `C:\Program Files\Git\bin\git.exe`
+- コミットメッセージは変更内容が分かる短い英文または日本語でよい。
+- プッシュが認証エラー等で失敗したときだけ、ユーザーに手元での実行を案内する。
