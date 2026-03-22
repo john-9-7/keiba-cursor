@@ -24,11 +24,17 @@ const {
   appendResult,
   getAccumulatorStatus,
   readRecentSnapshots,
+  getSnapshotsByDate,
+  readAllResultsLatestByRaceId,
   getMergedRecent,
   computeStatsFromMerged,
 } = require('./lib/raceAccumulator');
 /** race-analyze 取得は蓄積ロジックと独立（lib/keibaAnalyzeFetch）。5xx 時はリトライ付き */
 const { fetchRaceAnalyzeHtml } = require('./lib/keibaAnalyzeFetch');
+const {
+  fetchRaceListForDate,
+  fetchResultByRaceId,
+} = require('./lib/netkeibaResult');
 
 /** 同時取得数。クラウドIPで 500 が出やすいときは 1〜2 に下げる（環境変数 DASHBOARD_FETCH_CONCURRENCY） */
 const DASHBOARD_FETCH_CONCURRENCY = (() => {
@@ -799,6 +805,104 @@ app.post('/api/accumulate/result', (req, res) => {
     res.json({ ok: true, accumulator: getAccumulatorStatus() });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || '記録に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/accumulate/fetch-results
+ * netkeiba から指定日のレース結果を取得し results.jsonl に追記
+ * Body: { "date": "2026-03-15" } … 対象日（YYYY-MM-DD）
+ * 蓄積済みスナップショットのうち meetingDate が一致し、結果未登録のレースのみ取得
+ */
+const FETCH_RESULTS_CONCURRENCY = Math.min(Math.max(parseInt(process.env.FETCH_RESULTS_CONCURRENCY || '2', 10), 1), 4);
+app.post('/api/accumulate/fetch-results', async (req, res) => {
+  const { date } = req.body || {};
+  const dateStr = String(date || '').trim();
+  if (!dateStr || !/^\d{4}[-/]?\d{1,2}[-/]?\d{1,2}$/.test(dateStr.replace(/-/g, '-'))) {
+    return res.status(400).json({ ok: false, error: 'date を指定してください（例: 2026-03-15）。' });
+  }
+  try {
+    const snaps = getSnapshotsByDate(dateStr, 500);
+    if (snaps.length === 0) {
+      return res.json({
+        ok: true,
+        date: dateStr,
+        message: '指定日の蓄積スナップショットがありません。',
+        fetched: 0,
+        skipped: 0,
+        failed: 0,
+        accumulator: getAccumulatorStatus(),
+      });
+    }
+    const existing = readAllResultsLatestByRaceId();
+    const listRes = await fetchRaceListForDate(dateStr);
+    if (!listRes.ok || !listRes.map) {
+      return res.status(502).json({
+        ok: false,
+        error: listRes.error || 'netkeiba のレース一覧を取得できませんでした。',
+      });
+    }
+    const map = listRes.map;
+    const toFetch = snaps.filter((s) => {
+      const rid = s.raceId != null ? Number(s.raceId) : NaN;
+      if (Number.isNaN(rid) || rid < 1) return false;
+      if (existing.has(rid)) return false;
+      const venue = (s.venue || '').trim();
+      const idx = s.raceIndex != null ? Number(s.raceIndex) : NaN;
+      if (!venue || Number.isNaN(idx) || idx < 1) return false;
+      const key = `${venue}\t${idx}`;
+      return map.has(key);
+    });
+    const results = { fetched: 0, skipped: snaps.length - toFetch.length, failed: 0, errors: [] };
+    let cursor = 0;
+    async function worker() {
+      for (;;) {
+        const i = cursor++;
+        if (i >= toFetch.length) return;
+        const s = toFetch[i];
+        const rid = Number(s.raceId);
+        const key = `${(s.venue || '').trim()}\t${Number(s.raceIndex)}`;
+        const netkeibaId = map.get(key);
+        if (!netkeibaId) {
+          results.skipped += 1;
+          return;
+        }
+        const fr = await fetchResultByRaceId(netkeibaId);
+        if (!fr.ok || !fr.result) {
+          results.failed += 1;
+          results.errors.push({ raceId: rid, venue: s.venue, error: fr.error || '取得失敗' });
+          return;
+        }
+        try {
+          appendResult({
+            raceId: rid,
+            first: fr.result.first,
+            second: fr.result.second,
+            third: fr.result.third,
+            finishOrder: fr.result.finishOrder,
+            note: `netkeiba自動取得 ${netkeibaId}`,
+          });
+          results.fetched += 1;
+        } catch (e) {
+          results.failed += 1;
+          results.errors.push({ raceId: rid, error: e.message });
+        }
+      }
+    }
+    const n = Math.min(FETCH_RESULTS_CONCURRENCY, toFetch.length);
+    await Promise.all(Array.from({ length: n }, () => worker()));
+    res.json({
+      ok: true,
+      date: dateStr,
+      fetched: results.fetched,
+      skipped: results.skipped,
+      failed: results.failed,
+      errors: results.errors.length > 0 ? results.errors.slice(0, 10) : undefined,
+      accumulator: getAccumulatorStatus(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: err.message || '結果取得に失敗しました。' });
   }
 });
 

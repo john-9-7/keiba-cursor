@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node server.js",
-    "verify": "node scripts/verify-fetch.js"
+    "verify": "node scripts/verify-fetch.js",
+    "test:netkeiba": "node scripts/test-netkeiba-parse.js"
   },
   "engines": {
     "node": ">=18.0.0"

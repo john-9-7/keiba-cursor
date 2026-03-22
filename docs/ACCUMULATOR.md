@@ -14,7 +14,7 @@
 
 ## 画面（フェーズ1〜2）
 
-- **`/accumulate-view.html`** … 蓄積の**一覧（結果突合）**・**着順の入力**・**1〜3着馬のBB指数順位（そのレース内の競技順位）**・**CSV**・**RPT別集計**・**BB順位のヒストグラム**（直近最大500件ベース）。
+- **`/accumulate-view.html`** … 蓄積の**一覧（結果突合）**・**着順の入力**・**結果の自動取得（netkeiba）**・**1〜3着馬のBB指数順位（そのレース内の競技順位）**・**CSV**・**RPT別集計**・**BB順位のヒストグラム**（直近最大500件ベース）。
 
 ### 重複しない取り込み
 
@@ -36,6 +36,7 @@
 - `POST /api/accumulate/bulk-all-list` … レース一覧HTMLから **日付×会場のすべて** を順に蓄積（各会場の全レース）。`date` を省略すると一覧に出ている開催すべて。`date` を指定するとその日付の会場だけ。**処理が長い**ためホスティングの **HTTP タイムアウト**に注意
 - `POST /api/accumulate/save-race` … 1レースだけ `raceId` で取得して追記
 - `POST /api/accumulate/result` … `raceId` + 着順などを `results.jsonl` に追記（同一 `race_id` で複数行ある場合、突合では **recordedAt が最新**の行を使用）
+- `POST /api/accumulate/fetch-results` … 指定日の蓄積スナップショットのうち**結果未登録**のレースについて、**netkeiba** から着順を自動取得し `results.jsonl` に追記。Body: `{ "date": "2026-03-15" }`。中央競馬（中山・中京・阪神など）のみ対応。同時取得数は `FETCH_RESULTS_CONCURRENCY`（既定2）で調整可。
 
 ## クラウド（Render 等）について
 
@@ -44,7 +45,7 @@
 ## 分析の進め方（例）
 
 1. 過去開催を表示できる Cookie で `bulk-venue` を回し、会場12R分を `snapshots.jsonl` に溜める。
-2. レース後、**`/accumulate-view.html`** で `race_id` と1〜3着を入力する（または `POST /api/accumulate/result`）。
+2. レース後、**`/accumulate-view.html`** で `race_id` と1〜3着を入力するか、**結果を自動取得**で netkeiba から一括取得（または `POST /api/accumulate/result` / `POST /api/accumulate/fetch-results`）。
 3. 同ページの**集計**・**CSV**で RPT 別の傾向を確認する。さらに深い分析は CSV を Excel 等へ。
 
 （サイトの利用規約・スクレイピング可否は各自でご確認ください。）
