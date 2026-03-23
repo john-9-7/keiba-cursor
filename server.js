@@ -790,10 +790,10 @@ app.post('/api/accumulate/save-race', async (req, res) => {
 /**
  * POST /api/accumulate/result
  * レース結果を results.jsonl に追記（後から RPT・判定と突合する用）
- * Body: { "raceId": number, "first"?: number, "second"?: number, "third"?: number, "finishOrder"?: number[], "note"?: string }
+ * Body: { "raceId": number, "first"?: number, "second"?: number, "third"?: number, "finishOrder"?: number[], "payouts"?: object, "note"?: string }
  */
 app.post('/api/accumulate/result', (req, res) => {
-  const { raceId, first, second, third, finishOrder, note } = req.body || {};
+  const { raceId, first, second, third, finishOrder, payouts, note } = req.body || {};
   const id = parseInt(raceId, 10);
   if (Number.isNaN(id) || id < 1) {
     return res.status(400).json({ ok: false, error: 'raceId を指定してください。' });
@@ -805,6 +805,7 @@ app.post('/api/accumulate/result', (req, res) => {
       second: second != null ? parseInt(second, 10) : undefined,
       third: third != null ? parseInt(third, 10) : undefined,
       finishOrder: Array.isArray(finishOrder) ? finishOrder.map((n) => parseInt(n, 10)).filter((n) => !Number.isNaN(n)) : undefined,
+      payouts: payouts && typeof payouts === 'object' ? payouts : undefined,
       note,
     });
     res.json({ ok: true, accumulator: getAccumulatorStatus() });
@@ -880,6 +881,7 @@ async function fetchResultsForDate(dateStr) {
           second: fr.result.second,
           third: fr.result.third,
           finishOrder: fr.result.finishOrder,
+          payouts: fr.result.payouts,
           note: `netkeiba自動取得 ${netkeibaId}`,
         });
         results.fetched += 1;

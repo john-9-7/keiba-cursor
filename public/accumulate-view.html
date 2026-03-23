@@ -69,7 +69,7 @@
     </nav>
 
     <h1>蓄積データの確認・結果入力</h1>
-    <p class="lead">蓄積したスナップショットと、後から入力した<strong>着順</strong>を突合します。<strong>BB指数の競技順位</strong>（そのレースの出馬表内で何位か）を1〜3着馬について表示します。レース後は <strong>race_id</strong> と1〜3着馬番を登録してください。</p>
+    <p class="lead">蓄積したスナップショットと、後から入力した<strong>着順/払戻</strong>を突合します。レース後は <strong>race_id</strong> と1〜3着馬番を登録、または「結果を自動取得（netkeiba）」でまとめて反映してください。</p>
 
     <div class="panel" style="border:2px solid #bfdbfe;background:#eff6ff">
       <h2>今やること（迷ったらここだけ）</h2>
@@ -84,8 +84,8 @@
     </div>
 
     <div class="panel">
-      <h2>集計（RPT別の精度・BB順位分析）</h2>
-      <p class="hint" style="margin-top:0">件数は末尾から最大500件（API指定）を突合した結果です。ここでは「RPT別に1/2/3着へBB何位が来たか」と「買い判定の的中率（1着を候補馬で取れた率）」を重視します。</p>
+      <h2>集計（RPT別の精度・回収率）</h2>
+      <p class="hint" style="margin-top:0">件数は末尾から最大500件（API指定）を突合した結果です。ここでは「買い判定の的中率」と「RPT別の回収率（各買い目100円固定）」を重視します。</p>
       <div id="statsArea"><p class="muted">読み込み中...</p></div>
     </div>
 
@@ -216,12 +216,24 @@
         html += '<div class="stat-card"><div class="num">' + esc(s.snapshotRows) + '</div><div class="lbl">表示対象<br>スナップショット</div></div>';
         html += '<div class="stat-card"><div class="num">' + esc(s.linkedResultCount) + '</div><div class="lbl">結果が<br>紐づいた件数</div></div>';
         html += '<div class="stat-card"><div class="num">' + esc(s.buyWithResult) + '</div><div class="lbl">買い判定かつ<br>結果あり</div></div>';
-        html += '<div class="stat-card"><div class="num">' + esc(s.bbTopFirstWhenBuy) + '</div><div class="lbl">そのうち<br>BB最高=1着</div></div>';
+        html += '<div class="stat-card"><div class="num">' + esc(s.roiSamples || 0) + '</div><div class="lbl">払戻あり<br>買い件数</div></div>';
+        html += '<div class="stat-card"><div class="num">' + esc((s.roiPercent || 0).toFixed(1)) + '%</div><div class="lbl">全体回収率<br>(払戻/投資)</div></div>';
         html += '</div>';
         html += '<p class="hint">' + esc(s.legend) + '</p>';
+        if (s.totalByType) {
+          html += '<p style="font-size:0.82rem;font-weight:700;margin:10px 0 6px;color:#0f172a">券種別 回収状況（全RPT合算）</p>';
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>券種</th><th>投資(円)</th><th>払戻(円)</th><th>回収率</th></tr></thead><tbody>';
+          ['umaren','wide','umatan','sanrenpuku','sanrentan'].forEach(function (t) {
+            var v = s.totalByType[t] || { stake: 0, payout: 0 };
+            var r = v.stake > 0 ? Math.round((v.payout / v.stake) * 1000) / 10 : 0;
+            var nameMap = { umaren: '馬連', wide: 'ワイド', umatan: '馬単', sanrenpuku: '3連複', sanrentan: '3連単' };
+            html += '<tr><td>' + nameMap[t] + '</td><td>' + Number(v.stake || 0).toLocaleString('ja-JP') + '</td><td>' + Number(v.payout || 0).toLocaleString('ja-JP') + '</td><td>' + r.toFixed(1) + '%</td></tr>';
+          });
+          html += '</tbody></table></div>';
+        }
         if (keys.length) {
           html += '<p style="font-size:0.82rem;font-weight:700;margin:12px 0 6px;color:#0f172a">RPTごとの買う/見送り推奨（暫定）</p>';
-          html += '<p class="hint" style="margin-top:0">基準: 買い+結果が5件以上あるRPTを対象。的中率（1着が候補内）35%以上=「買う候補」、20%以下=「見送り候補」、それ以外=「保留」。</p>';
+          html += '<p class="hint" style="margin-top:0">基準: 買い+結果が5件以上あるRPTを対象。的中率35%以上=「買う候補」、20%以下=「見送り候補」、それ以外=「保留」。回収率が100%未満なら条件見直し対象です。</p>';
           html += '<div class="rpt-decision-grid">';
           keys.forEach(function (k) {
             var b = byRpt[k] || {};
@@ -254,7 +266,7 @@
           html += '</div>';
         }
         if (keys.length) {
-          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>条件的中</th><th>的中率</th><th>BB最高=1着</th><th>BB最高=1着率</th></tr></thead><tbody>';
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>条件的中</th><th>的中率</th><th>投資(円)</th><th>払戻(円)</th><th>回収率</th><th>BB最高=1着</th><th>BB最高=1着率</th></tr></thead><tbody>';
           keys.forEach(function (k) {
             var b = byRpt[k];
             var rate = b.buyWithResult > 0 ? Math.round((b.bbTopFirstWhenBuy / b.buyWithResult) * 1000) / 10 : 0;
@@ -278,6 +290,13 @@
               esc(hitRate.toFixed(1)) +
               '%' +
               '</td><td>' +
+              Number(b.totalStake || 0).toLocaleString('ja-JP') +
+              '</td><td>' +
+              Number(b.totalPayout || 0).toLocaleString('ja-JP') +
+              '</td><td>' +
+              esc((b.roiPercent || 0).toFixed(1)) +
+              '%' +
+              '</td><td>' +
               b.bbTopFirstWhenBuy +
               '</td><td>' +
               esc(rate.toFixed(1)) +
@@ -298,7 +317,7 @@
       var err = document.getElementById('tableErr');
       err.style.display = 'none';
       if (!rows || !rows.length) {
-        tb.innerHTML = '<tr><td colspan="12" class="muted">データがありません。analyze で一括蓄積するか、しばらく待ってから再読み込みしてください。</td></tr>';
+        tb.innerHTML = '<tr><td colspan="13" class="muted">データがありません。analyze で一括蓄積するか、しばらく待ってから再読み込みしてください。</td></tr>';
         return;
       }
       var html = '';
@@ -416,6 +435,9 @@
         'thirdBbRank',
         'bbTopIsFirst',
         'hitAny',
+        'totalStake',
+        'totalPayout',
+        'roiPercent',
         'betUmaren',
         'betWide',
         'betUmatan',
@@ -428,6 +450,7 @@
         var res = r.result || {};
         var hitAny = r.hitByType ? r.hitByType.anyHit : null;
         var bets = r.actualBets || {};
+        var ret = r.returnByType || {};
         lines.push(
           [
             csvCell(r.savedAt),
@@ -446,6 +469,9 @@
             csvCell(r.thirdBbRank),
             csvCell(r.bbTopIsFirst),
             csvCell(hitAny),
+            csvCell(ret.totalStake),
+            csvCell(ret.totalPayout),
+            csvCell(ret.roiPercent),
             csvCell(bets.umaren || ''),
             csvCell(bets.wide || ''),
             csvCell(bets.umatan || ''),
