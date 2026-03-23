@@ -1,6 +1,7 @@
 node_modules/
 .env
 *.log
+logs/
 .DS_Store
 data/keiba-session.txt
 data/keiba-session-live.txt

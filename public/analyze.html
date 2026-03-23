@@ -55,12 +55,12 @@
     <h1>分析・データ蓄積</h1>
 
     <div class="steps">
-      <strong style="color:#134e4a">手順（このページ）</strong>
+      <strong style="color:#134e4a">最短手順（通常はこの順だけ）</strong>
       <ol style="margin-top:12px">
         <li>競馬クラスターで<strong>過去の開催日</strong>の画面を開き、当日用とは別にログイン（必要ならその日のパスワード）します。</li>
         <li>開発者ツール（F12）→ アプリケーション → Cookie から <code>laravel_session</code> と <code>XSRF-TOKEN</code> をコピーします。</li>
         <li>下の欄に貼り付け、<strong>「過去・DB用としてサーバーに保存」</strong>を押します。</li>
-        <li>レースデータを取り込むときは、<strong>今日のレース</strong>ページを開き、取得時のラジオで<strong>「過去・DB用」</strong>を選びます（または下のボタンで自動で選んだ状態で開きます）。</li>
+        <li><strong>「全会場まとめて蓄積する」</strong> を押して取り込みます（重複は自動スキップ）。</li>
       </ol>
     </div>
 
@@ -75,17 +75,19 @@
       <button type="button" id="btnClearArchive" class="btn-secondary">過去・DB用の保存を削除</button>
     </div>
 
-    <div class="panel">
-      <h2>どこに溜まるか（保存先）</h2>
-      <p style="font-size:0.875rem;color:#334155;margin:0;line-height:1.6">
-        ツールが動いている<strong>サーバー内</strong>のフォルダ <strong><code class="path">data/accumulated/</code></strong> に保存されます（本番URLで使っているときはクラウド上。手元PCで <code class="path">npm start</code> のときはそのPCのプロジェクト内）。
-      </p>
-      <ul style="font-size:0.85rem;color:#475569;line-height:1.6;margin:10px 0 0 1rem">
-        <li><code class="path">snapshots.jsonl</code> … 各レースの RPT・馬柱・判定など（1行＝1レース・追記のみ）</li>
-        <li><code class="path">results.jsonl</code> … 後から着順を足すとき用（API <code>/api/accumulate/result</code>）</li>
-      </ul>
-      <p class="hint" style="margin-bottom:0">詳細は <code>docs/ACCUMULATOR.md</code>。バックアップはフォルダごとコピーしてください（<code>.jsonl</code> は Git に含まれません）。</p>
-    </div>
+    <details class="panel" style="padding-top:10px;padding-bottom:10px">
+      <summary style="cursor:pointer;font-weight:700;color:#0f766e">保存先の詳細（通常は見なくてOK）</summary>
+      <div style="margin-top:10px">
+        <p style="font-size:0.875rem;color:#334155;margin:0;line-height:1.6">
+          ツールが動いている<strong>サーバー内</strong>のフォルダ <strong><code class="path">data/accumulated/</code></strong> に保存されます（本番URLで使っているときはクラウド上。手元PCで <code class="path">npm start</code> のときはそのPCのプロジェクト内）。
+        </p>
+        <ul style="font-size:0.85rem;color:#475569;line-height:1.6;margin:10px 0 0 1rem">
+          <li><code class="path">snapshots.jsonl</code> … 各レースの RPT・馬柱・判定など（1行＝1レース・追記のみ）</li>
+          <li><code class="path">results.jsonl</code> … 後から着順を足すとき用（API <code>/api/accumulate/result</code>）</li>
+        </ul>
+        <p class="hint" style="margin-bottom:0">詳細は <code>docs/ACCUMULATOR.md</code>。バックアップはフォルダごとコピーしてください（<code>.jsonl</code> は Git に含まれません）。</p>
+      </div>
+    </details>
 
     <div class="panel" style="border:2px solid #a78bfa;background:#faf5ff">
       <h2>一覧の全会場・全レースを一気に取り込む（超一括）</h2>
@@ -147,11 +149,14 @@
       <div class="soon" style="margin-top:16px"><strong>結果との突合・一覧：</strong> <a href="/accumulate-view.html" style="color:#92400e;font-weight:600">蓄積データの確認・結果入力</a> で着順を登録し、表・集計・CSVを利用できます。</div>
     </div>
 
-    <div class="panel">
+    <details class="panel" style="padding-top:10px;padding-bottom:10px">
+      <summary style="cursor:pointer;font-weight:700;color:#0f766e">1レースずつ取得したいとき（補助機能）</summary>
+      <div style="margin-top:10px">
       <h2>レースデータの取得（1レースずつ）</h2>
       <p style="font-size:0.875rem;color:#64748b;margin:0;line-height:1.55">データ取得・一覧・判定は「今日のレース」と同じです。次のボタンから開くと、<strong>取得で使う Cookie が「過去・DB用」</strong>に切り替わった状態で始まります。</p>
       <a class="cta" href="/today.html?purpose=archive">今日のレースページを開く（過去・DB用モード）</a>
-    </div>
+      </div>
+    </details>
   </div>
 
   <script>

@@ -6,6 +6,7 @@
 
 - **[操作手順（操作手順.md）](docs/操作手順.md)** … **本番サーバー**での使い方（URL・環境変数・取得・トラブル）。手元PCでの起動は付録に記載
 - **[仕様書（SPEC.md）](docs/SPEC.md)** … 機能要件・判定ロジック・出力フォーマット・データソース等の定義
+- **[プロジェクト1枚要約（PROJECT_ONE_PAGER.md）](docs/PROJECT_ONE_PAGER.md)** … 目的・運用フロー・優先順位を1枚で確認するための基準文書
 - **[次のステップ（NEXT_STEPS.md）](docs/NEXT_STEPS.md)** … 開発の進め方・おすすめの順番
 - **[技術選定（TECH_STACK.md）](docs/TECH_STACK.md)** … 採用技術とプロジェクト構成
 - **[スクレイピング技術仕様（SCRAPING_SPEC.md）](docs/SCRAPING_SPEC.md)** … 競馬クラスターのCookie・race-list/race-analyze の構造とパース仕様
@@ -53,6 +54,69 @@
    - 開発者ツール（F12）などで **Cookie**（laravel_session と XSRF-TOKEN）をコピー。
    - 本ツールの画面で Cookie と URL を貼り付けて「取得」を押す。
    - **トップページが返る場合**は、画面の「**ブラウザで取得**」にチェックを入れてから再度「取得」を押す（Playwright で実ブラウザから取得します）。
+
+## テスト（回帰・スモーク）
+
+1. **回帰テスト（ローカル、ネットワーク不要）**
+   ```bash
+   npm run test:regression
+   ```
+   - 一覧パース（`allRaces` 多重ブロック）  
+   - ダッシュボードのレース選定  
+   - 発走済み判定
+
+2. **スモークテスト（デプロイ先疎通）**
+   ```bash
+   npm run test:smoke
+   ```
+   既定は `http://localhost:3000` を対象。Render 本番を確認する場合は例のように環境変数を付けて実行します。
+   ```powershell
+   $env:SMOKE_BASE_URL="https://keiba-cursor.onrender.com"
+   $env:SMOKE_AUTH_USER="your_id"
+   $env:SMOKE_AUTH_PASS="your_strong_password"
+   $env:SMOKE_COOKIE_PURPOSE="live"
+   npm run test:smoke
+   ```
+   - `SMOKE_COOKIE` 未指定時は、サーバー保存済みCookie（または `KEIBA_COOKIE` / `KEIBA_COOKIE_ARCHIVE`）を利用  
+   - `SMOKE_COOKIE` 指定時は、その値を優先して疎通確認
+
+3. **スモークテスト一括（live + archive）**
+   ```bash
+   npm run test:smoke:all
+   ```
+   - `live` → `archive` の順で `test:smoke` を連続実行します。  
+   - 実行ログは既定で `logs/smoke-YYYYMMDD-HHMMSS.log` に保存されます。  
+   - 同名で `logs/smoke-YYYYMMDD-HHMMSS.json` も生成され、モード別の機械可読サマリーを保存します。  
+   - 失敗時はログ末尾に **mode別サマリー**（`summary=...`）と **stdout/stderr の末尾抜粋**を自動追記します。  
+   - サマリーにはエラー種別タグ（`AUTH` / `NETWORK` / `TIMEOUT` / `HTTP_4XX` / `HTTP_5XX` / `SESSION`）を自動付与します。  
+   - 片方だけ実行したい場合:
+   ```powershell
+   $env:SMOKE_ALL_MODES="live"
+   npm run test:smoke:all
+   ```
+   - ログ保存先を変える場合:
+   ```powershell
+   $env:SMOKE_LOG_DIR="tmp/smoke-logs"
+   npm run test:smoke:all
+   ```
+
+4. **スモーク結果レポート（最新JSONを要約）**
+   ```bash
+   npm run test:smoke:report
+   ```
+   - 最新の `logs/smoke-*.json` を読み、失敗モードの次アクションを1行で表示します。  
+   - 特定のJSONを読む場合:
+   ```powershell
+   $env:SMOKE_REPORT_FILE="logs/smoke-20260324-012415.json"
+   npm run test:smoke:report
+   ```
+
+5. **ゲート一括（回帰 → smoke-all → report）**
+   ```bash
+   npm run test:gate
+   ```
+   - デプロイ直前チェック用のワンコマンドです。  
+   - 途中で失敗した時点で終了します。
 
 ## 自分専用で公開する（認証つき）
 
