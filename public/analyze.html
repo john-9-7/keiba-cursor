@@ -41,6 +41,15 @@
     .acc-step-body .hint { margin-top: 8px; margin-bottom: 0; }
     button.btn-acc-primary { width: 100%; max-width: 100%; margin-top: 8px; }
     .quick-status { font-size: 0.82rem; line-height: 1.6; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
+    .now-card { border: 2px solid #bfdbfe; background: #eff6ff; border-radius: 10px; padding: 12px 14px; margin-bottom: 14px; }
+    .now-card h2 { margin: 0 0 8px 0; font-size: 0.98rem; color: #1e3a8a; }
+    .now-badges { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .now-badge { border-radius: 999px; padding: 5px 10px; font-size: 0.76rem; font-weight: 700; border: 1px solid; }
+    .now-badge.ok { color: #166534; background: #f0fdf4; border-color: #86efac; }
+    .now-badge.ng { color: #991b1b; background: #fef2f2; border-color: #fecaca; }
+    .now-next { background: #ffffff; border: 1px solid #dbeafe; border-radius: 8px; padding: 10px 12px; font-size: 0.84rem; color: #1e3a8a; line-height: 1.6; }
+    .guide-focus { box-shadow: 0 0 0 3px #fde68a, 0 0 0 6px rgba(251, 191, 36, 0.25); background: #f59e0b !important; color: #fff !important; animation: pulseGuide 1.2s ease-in-out infinite; }
+    @keyframes pulseGuide { 0% { transform: scale(1); } 50% { transform: scale(1.01); } 100% { transform: scale(1); } }
   </style>
 </head>
 <body>
@@ -54,6 +63,13 @@
     </nav>
 
     <h1>分析・データ蓄積</h1>
+    <div class="now-card">
+      <h2>現在の状況（次にやること）</h2>
+      <div id="nowBadges" class="now-badges">
+        <span class="now-badge ng">確認中...</span>
+      </div>
+      <div id="nowNext" class="now-next">状態を読み込み中です...</div>
+    </div>
 
     <div class="steps">
       <strong style="color:#134e4a">最短手順（通常はこの順だけ）</strong>
@@ -76,6 +92,7 @@
       <p class="hint">Cookie欄に値があれば保存して使います。空欄なら保存済みの過去・DB用 Cookie を使います。</p>
       <p>
         <button type="button" id="btnQuickRun" class="btn-acc-primary" style="background:#0284c7">最短実行（保存→蓄積→結果取得）</button>
+        <button type="button" id="btnSwitchDateMode" class="btn-acc-primary btn-secondary" style="margin-top:8px;background:#475569">日付切替モード（保存削除→新Cookie入力）</button>
       </p>
       <div id="quickRunStatus" class="quick-status">待機中: 最短実行を押すと、ここに進捗を表示します。</div>
     </div>
@@ -190,7 +207,61 @@
     const btnBulkAllList = document.getElementById('btnBulkAllList');
     const quickDateEl = document.getElementById('quickDate');
     const btnQuickRun = document.getElementById('btnQuickRun');
+    const btnSwitchDateMode = document.getElementById('btnSwitchDateMode');
     const quickRunStatusEl = document.getElementById('quickRunStatus');
+    const btnFetchResults = document.getElementById('btnFetchResults');
+    const nowBadgesEl = document.getElementById('nowBadges');
+    const nowNextEl = document.getElementById('nowNext');
+
+    var state = {
+      hasArchiveCookie: false,
+      snapshots: 0,
+      results: 0,
+    };
+
+    function renderNowCard() {
+      if (!nowBadgesEl || !nowNextEl) return;
+      var badges = [];
+      badges.push(
+        '<span class="now-badge ' +
+          (state.hasArchiveCookie ? 'ok' : 'ng') +
+          '">過去・DB用Cookie: ' +
+          (state.hasArchiveCookie ? '準備OK' : '未設定') +
+          '</span>'
+      );
+      badges.push(
+        '<span class="now-badge ' +
+          (state.snapshots > 0 ? 'ok' : 'ng') +
+          '">蓄積スナップ: ' +
+          state.snapshots +
+          '件</span>'
+      );
+      badges.push(
+        '<span class="now-badge ' +
+          (state.results > 0 ? 'ok' : 'ng') +
+          '">結果データ: ' +
+          state.results +
+          '件</span>'
+      );
+      nowBadgesEl.innerHTML = badges.join('');
+      [btnSaveArchive, btnQuickRun, btnFetchResults].forEach(function (el) {
+        if (el) el.classList.remove('guide-focus');
+      });
+
+      if (!state.hasArchiveCookie) {
+        nowNextEl.innerHTML = '次: Cookie を貼って「過去・DB用としてサーバーに保存」を押してください。<br>（日付を切り替えるときは「日付切替モード」を使うと安全です）';
+        if (btnSaveArchive) btnSaveArchive.classList.add('guide-focus');
+      } else if (state.snapshots === 0) {
+        nowNextEl.innerHTML = '次: 「最短実行」を押して、保存→蓄積→結果取得をまとめて進めてください。';
+        if (btnQuickRun) btnQuickRun.classList.add('guide-focus');
+      } else if (state.results < state.snapshots) {
+        nowNextEl.innerHTML = '次: 「最短実行」または「結果を自動取得」で結果データを増やしてください。<br>その後「蓄積の確認・結果」でRPT傾向を確認します。';
+        if (btnFetchResults) btnFetchResults.classList.add('guide-focus');
+      } else {
+        nowNextEl.innerHTML = '良い状態です。次は「蓄積の確認・結果」でRPT別の傾向を見て、買い条件をブラッシュアップしてください。';
+        if (btnQuickRun) btnQuickRun.classList.add('guide-focus');
+      }
+    }
 
     async function refreshStatus() {
       try {
@@ -207,8 +278,12 @@
           line += '<span style="color:#94a3b8">未設定</span>（上で保存するか Render に KEIBA_COOKIE_ARCHIVE）';
         }
         sessionStatusEl.innerHTML = line;
+        state.hasArchiveCookie = !!data.hasSavedArchive;
+        renderNowCard();
       } catch (e) {
         sessionStatusEl.textContent = '状態を取得できませんでした。';
+        state.hasArchiveCookie = false;
+        renderNowCard();
       }
     }
 
@@ -269,6 +344,9 @@
           accStatusEl.innerHTML =
             'スナップショット: <strong>' + data.snapshotsCount + '</strong> 件 · 結果メモ: <strong>' + data.resultsCount + '</strong> 件<br>' +
             '<span style="color:#94a3b8;font-size:0.75rem">保存先: ' + (data.snapshotsPath || '') + '</span>';
+          state.snapshots = Number(data.snapshotsCount || 0);
+          state.results = Number(data.resultsCount || 0);
+          renderNowCard();
         } else {
           accStatusEl.textContent = '蓄積状態を取得できませんでした。';
         }
@@ -429,6 +507,45 @@
       });
     }
 
+    if (btnSwitchDateMode) {
+      btnSwitchDateMode.addEventListener('click', async function () {
+        var ok = confirm(
+          '日付切替モードを開始します。\n\n' +
+          '1) 過去・DB用の保存済みCookieを削除\n' +
+          '2) 新しい日付でログインしたCookieを貼り付け\n' +
+          '3) 最短実行で保存→蓄積→結果取得\n\n' +
+          '続行しますか？'
+        );
+        if (!ok) return;
+        btnSwitchDateMode.disabled = true;
+        try {
+          var res = await fetch('/api/keiba-session', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ cookiePurpose: 'archive' }),
+            credentials: 'include',
+          });
+          var data = await res.json();
+          if (!data.ok) {
+            if (quickRunStatusEl) quickRunStatusEl.textContent = '削除に失敗: ' + (data.error || 'unknown');
+            return;
+          }
+          cookieEl.value = '';
+          if (quickRunStatusEl) {
+            quickRunStatusEl.innerHTML =
+              '日付切替モード: 準備完了<br>' +
+              '次の手順: ①新しい日付でログインしたCookieを貼る ②「最短実行」を押す';
+          }
+          await refreshStatus();
+          cookieEl.focus();
+        } catch (e) {
+          if (quickRunStatusEl) quickRunStatusEl.textContent = '通信エラー: ' + e.message;
+        } finally {
+          btnSwitchDateMode.disabled = false;
+        }
+      });
+    }
+
     if (btnBulkAccumulate) {
       btnBulkAccumulate.addEventListener('click', async function () {
         var d = accDateEl.value.trim();
@@ -474,6 +591,7 @@
 
     refreshStatus();
     refreshAccStatus();
+    renderNowCard();
   </script>
 </body>
 </html>

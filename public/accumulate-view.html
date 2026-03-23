@@ -27,6 +27,14 @@
     button.btn-blue { background: #2563eb; }
     button.btn-blue:hover { background: #1d4ed8; }
     .stats-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: 14px; }
+    .rpt-decision-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; margin: 12px 0 6px; }
+    .rpt-decision-card { border-radius: 8px; padding: 10px 12px; border: 1px solid #e5e7eb; background: #fff; }
+    .rpt-decision-card.buy { border-color: #86efac; background: #f0fdf4; }
+    .rpt-decision-card.skip { border-color: #fecaca; background: #fef2f2; }
+    .rpt-decision-card.hold { border-color: #cbd5e1; background: #f8fafc; }
+    .rpt-decision-title { font-size: 0.82rem; font-weight: 700; margin-bottom: 6px; color: #0f172a; }
+    .rpt-decision-main { font-size: 0.9rem; font-weight: 800; margin-bottom: 4px; }
+    .rpt-decision-sub { font-size: 0.75rem; color: #334155; line-height: 1.45; }
     .stat-card { background: #f1f5f9; border-radius: 8px; padding: 10px 12px; text-align: center; }
     .stat-card .num { font-size: 1.35rem; font-weight: 700; color: #0f172a; }
     .stat-card .lbl { font-size: 0.7rem; color: #64748b; margin-top: 4px; line-height: 1.3; }
@@ -74,8 +82,8 @@
     </div>
 
     <div class="panel">
-      <h2>集計（直近のスナップショットを対象）</h2>
-      <p class="hint" style="margin-top:0">件数は末尾から最大500件（API指定）を突合した結果です。データが多いときは CSV で全体をExcelに出すのも有効です。</p>
+      <h2>集計（RPT別の精度・BB順位分析）</h2>
+      <p class="hint" style="margin-top:0">件数は末尾から最大500件（API指定）を突合した結果です。ここでは「RPT別に1/2/3着へBB何位が来たか」と「買い判定の的中率（1着を候補馬で取れた率）」を重視します。</p>
       <div id="statsArea"><p class="muted">読み込み中...</p></div>
     </div>
 
@@ -149,7 +157,7 @@
               <th>2着BB順</th>
               <th>3着BB順</th>
               <th>BB最高=1着</th>
-              <th>推奨（要約）</th>
+              <th>買い目（実際）</th>
             </tr>
           </thead>
           <tbody id="tblBody"></tbody>
@@ -208,6 +216,40 @@
         html += '<div class="stat-card"><div class="num">' + esc(s.bbTopFirstWhenBuy) + '</div><div class="lbl">そのうち<br>BB最高=1着</div></div>';
         html += '</div>';
         html += '<p class="hint">' + esc(s.legend) + '</p>';
+        if (keys.length) {
+          html += '<p style="font-size:0.82rem;font-weight:700;margin:12px 0 6px;color:#0f172a">RPTごとの買う/見送り推奨（暫定）</p>';
+          html += '<p class="hint" style="margin-top:0">基準: 買い+結果が5件以上あるRPTを対象。的中率（1着が候補内）35%以上=「買う候補」、20%以下=「見送り候補」、それ以外=「保留」。</p>';
+          html += '<div class="rpt-decision-grid">';
+          keys.forEach(function (k) {
+            var b = byRpt[k] || {};
+            var sample = Number(b.buyWithResult || 0);
+            var hitRate = Number(b.hitRatePercent || 0);
+            var stateCls = 'hold';
+            var stateText = '保留';
+            var reason = '';
+            if (sample < 5) {
+              stateText = '保留';
+              reason = 'サンプル不足（買い+結果が5件未満）';
+            } else if (hitRate >= 35) {
+              stateCls = 'buy';
+              stateText = '買う候補';
+              reason = '的中率が高め';
+            } else if (hitRate <= 20) {
+              stateCls = 'skip';
+              stateText = '見送り候補';
+              reason = '的中率が低め';
+            } else {
+              stateText = '保留';
+              reason = '中間帯。条件調整で再評価';
+            }
+            html += '<div class="rpt-decision-card ' + stateCls + '">';
+            html += '<div class="rpt-decision-title">RPT ' + esc(k) + '</div>';
+            html += '<div class="rpt-decision-main">' + esc(stateText) + '</div>';
+            html += '<div class="rpt-decision-sub">的中率: <strong>' + esc(hitRate.toFixed(1)) + '%</strong> / 買い+結果: <strong>' + sample + '件</strong><br>' + esc(reason) + '</div>';
+            html += '</div>';
+          });
+          html += '</div>';
+        }
         function histTable(title, hist) {
           if (!hist || typeof hist !== 'object') return '';
           var ks = Object.keys(hist).sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
@@ -224,10 +266,11 @@
         html += histTable('2着馬のBB順位の分布', s.secondPlaceBbRankHistogram);
         html += histTable('3着馬のBB順位の分布', s.thirdPlaceBbRankHistogram);
         if (keys.length) {
-          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>BB最高=1着</th><th>BB最高=1着率</th></tr></thead><tbody>';
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>条件的中</th><th>的中率</th><th>BB最高=1着</th><th>BB最高=1着率</th></tr></thead><tbody>';
           keys.forEach(function (k) {
             var b = byRpt[k];
             var rate = b.buyWithResult > 0 ? Math.round((b.bbTopFirstWhenBuy / b.buyWithResult) * 1000) / 10 : 0;
+            var hitRate = b.buyWithResult > 0 ? Math.round((b.buyHitFirst / b.buyWithResult) * 1000) / 10 : 0;
             html +=
               '<tr><td>' +
               esc(k) +
@@ -242,11 +285,64 @@
               '</td><td>' +
               b.buyWithResult +
               '</td><td>' +
+              (b.buyHitFirst || 0) +
+              '</td><td>' +
+              esc(hitRate.toFixed(1)) +
+              '%' +
+              '</td><td>' +
               b.bbTopFirstWhenBuy +
               '</td><td>' +
               esc(rate.toFixed(1)) +
               '%' +
               '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+
+          html += '<p style="font-size:0.82rem;font-weight:600;margin:14px 0 6px;color:#334155">RPT別 1着BB順位（件数）</p>';
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>1位</th><th>2位</th><th>3位</th><th>4位以下</th></tr></thead><tbody>';
+          keys.forEach(function (k) {
+            var b = byRpt[k] || {};
+            var h = b.firstHist || {};
+            var r1 = Number(h['1'] || 0);
+            var r2 = Number(h['2'] || 0);
+            var r3 = Number(h['3'] || 0);
+            var other = 0;
+            Object.keys(h).forEach(function (rk) {
+              if (rk !== '1' && rk !== '2' && rk !== '3') other += Number(h[rk] || 0);
+            });
+            html += '<tr><td>' + esc(k) + '</td><td>' + r1 + '</td><td>' + r2 + '</td><td>' + r3 + '</td><td>' + other + '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+
+          html += '<p style="font-size:0.82rem;font-weight:600;margin:14px 0 6px;color:#334155">RPT別 2着BB順位（件数）</p>';
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>1位</th><th>2位</th><th>3位</th><th>4位以下</th></tr></thead><tbody>';
+          keys.forEach(function (k) {
+            var b = byRpt[k] || {};
+            var h = b.secondHist || {};
+            var r1 = Number(h['1'] || 0);
+            var r2 = Number(h['2'] || 0);
+            var r3 = Number(h['3'] || 0);
+            var other = 0;
+            Object.keys(h).forEach(function (rk) {
+              if (rk !== '1' && rk !== '2' && rk !== '3') other += Number(h[rk] || 0);
+            });
+            html += '<tr><td>' + esc(k) + '</td><td>' + r1 + '</td><td>' + r2 + '</td><td>' + r3 + '</td><td>' + other + '</td></tr>';
+          });
+          html += '</tbody></table></div>';
+
+          html += '<p style="font-size:0.82rem;font-weight:600;margin:14px 0 6px;color:#334155">RPT別 3着BB順位（件数）</p>';
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>1位</th><th>2位</th><th>3位</th><th>4位以下</th></tr></thead><tbody>';
+          keys.forEach(function (k) {
+            var b = byRpt[k] || {};
+            var h = b.thirdHist || {};
+            var r1 = Number(h['1'] || 0);
+            var r2 = Number(h['2'] || 0);
+            var r3 = Number(h['3'] || 0);
+            var other = 0;
+            Object.keys(h).forEach(function (rk) {
+              if (rk !== '1' && rk !== '2' && rk !== '3') other += Number(h[rk] || 0);
+            });
+            html += '<tr><td>' + esc(k) + '</td><td>' + r1 + '</td><td>' + r2 + '</td><td>' + r3 + '</td><td>' + other + '</td></tr>';
           });
           html += '</tbody></table></div>';
         }
@@ -278,8 +374,7 @@
         var r1 = r.firstBbRank != null ? r.firstBbRank : '—';
         var r2 = r.secondBbRank != null ? r.secondBbRank : '—';
         var r3 = r.thirdBbRank != null ? r.thirdBbRank : '—';
-        var rec = r.recommend ? String(r.recommend).replace(/\s+/g, ' ').slice(0, 80) : '';
-        if (r.recommend && String(r.recommend).length > 80) rec += '…';
+        var rec = r.suggestedSummary || '—';
         html +=
           '<tr><td>' +
           esc((r.savedAt || '').replace('T', ' ').slice(0, 19)) +
@@ -352,6 +447,9 @@
         'secondBbRank',
         'thirdBbRank',
         'bbTopIsFirst',
+        'buyHitFirst',
+        'suggestedHorseNumbers',
+        'suggestedSummary',
         'recommend',
       ];
       var lines = [headers.join(',')];
@@ -359,6 +457,8 @@
         var r = mergedRows[i];
         var res = r.result || {};
         var rec = r.recommend ? String(r.recommend).replace(/\r?\n/g, ' ') : '';
+        var suggestedNums = Array.isArray(r.suggestedHorseNumbers) ? r.suggestedHorseNumbers.join('-') : '';
+        var suggestedSummary = r.suggestedSummary ? String(r.suggestedSummary).replace(/\r?\n/g, ' ') : '';
         lines.push(
           [
             csvCell(r.savedAt),
@@ -376,6 +476,9 @@
             csvCell(r.secondBbRank),
             csvCell(r.thirdBbRank),
             csvCell(r.bbTopIsFirst),
+            csvCell(r.buyHitFirst),
+            csvCell(suggestedNums),
+            csvCell(suggestedSummary),
             csvCell(rec),
           ].join(',')
         );
