@@ -61,6 +61,18 @@
     <h1>蓄積データの確認・結果入力</h1>
     <p class="lead">蓄積したスナップショットと、後から入力した<strong>着順</strong>を突合します。<strong>BB指数の競技順位</strong>（そのレースの出馬表内で何位か）を1〜3着馬について表示します。レース後は <strong>race_id</strong> と1〜3着馬番を登録してください。</p>
 
+    <div class="panel" style="border:2px solid #bfdbfe;background:#eff6ff">
+      <h2>今やること（迷ったらここだけ）</h2>
+      <ol style="margin:0;padding-left:18px;font-size:0.86rem;line-height:1.65;color:#1e3a8a">
+        <li><a href="/analyze.html" style="color:#1d4ed8;font-weight:600">分析・データ蓄積</a> で「最短実行」を回す（過去データを増やす）</li>
+        <li>この画面で「結果を自動取得（netkeiba）」を対象日ごとに実行する</li>
+        <li>下の RPT 集計を見て、<strong>買う/買わないRPT</strong> と条件修正候補を決める</li>
+      </ol>
+      <p class="hint" style="margin-bottom:0;margin-top:8px">
+        ※ 現在の集計は「的中傾向」中心です。<strong>回収率（払戻ベース）</strong>を厳密に出すには、別途「払戻データ」の取り込みが必要です。
+      </p>
+    </div>
+
     <div class="panel">
       <h2>集計（直近のスナップショットを対象）</h2>
       <p class="hint" style="margin-top:0">件数は末尾から最大500件（API指定）を突合した結果です。データが多いときは CSV で全体をExcelに出すのも有効です。</p>
@@ -212,9 +224,10 @@
         html += histTable('2着馬のBB順位の分布', s.secondPlaceBbRankHistogram);
         html += histTable('3着馬のBB順位の分布', s.thirdPlaceBbRankHistogram);
         if (keys.length) {
-          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>BB最高=1着</th></tr></thead><tbody>';
+          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>BB最高=1着</th><th>BB最高=1着率</th></tr></thead><tbody>';
           keys.forEach(function (k) {
             var b = byRpt[k];
+            var rate = b.buyWithResult > 0 ? Math.round((b.bbTopFirstWhenBuy / b.buyWithResult) * 1000) / 10 : 0;
             html +=
               '<tr><td>' +
               esc(k) +
@@ -230,6 +243,9 @@
               b.buyWithResult +
               '</td><td>' +
               b.bbTopFirstWhenBuy +
+              '</td><td>' +
+              esc(rate.toFixed(1)) +
+              '%' +
               '</td></tr>';
           });
           html += '</tbody></table></div>';

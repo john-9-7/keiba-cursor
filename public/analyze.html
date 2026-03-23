@@ -40,6 +40,7 @@
     .acc-step-body > strong { display: block; font-size: 0.9rem; color: #0f172a; margin-bottom: 6px; }
     .acc-step-body .hint { margin-top: 8px; margin-bottom: 0; }
     button.btn-acc-primary { width: 100%; max-width: 100%; margin-top: 8px; }
+    .quick-status { font-size: 0.82rem; line-height: 1.6; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 12px; margin-top: 10px; }
   </style>
 </head>
 <body>
@@ -59,9 +60,24 @@
       <ol style="margin-top:12px">
         <li>競馬クラスターで<strong>過去の開催日</strong>の画面を開き、当日用とは別にログイン（必要ならその日のパスワード）します。</li>
         <li>開発者ツール（F12）→ アプリケーション → Cookie から <code>laravel_session</code> と <code>XSRF-TOKEN</code> をコピーします。</li>
-        <li>下の欄に貼り付け、<strong>「過去・DB用としてサーバーに保存」</strong>を押します。</li>
-        <li><strong>「全会場まとめて蓄積する」</strong> を押して取り込みます（重複は自動スキップ）。</li>
+        <li>下の欄に貼り付け、<strong>「最短実行」</strong>を押します（保存→蓄積→結果取得まで自動）。</li>
+        <li>以降は Cookie が期限切れになるまで、<strong>Cookie欄は空で再実行</strong>できます。</li>
       </ol>
+    </div>
+
+    <div class="panel" style="border:2px solid #0ea5e9;background:#f0f9ff">
+      <h2>最短実行（おすすめ）</h2>
+      <p class="hint" style="margin-top:0">
+        このボタンで <strong>Cookie保存（任意）→ 全会場一括蓄積 → 結果自動取得（netkeiba）</strong> をまとめて実行します。
+        <br>回収率の厳密算出には「払戻データ」が必要なため、現状は <strong>RPT別の結果・的中傾向</strong> までを最短で蓄積します。
+      </p>
+      <label for="quickDate">日付で絞る（任意・空欄なら一覧に表示中の全開催）</label>
+      <input type="text" id="quickDate" placeholder="例: 2026-03-22（空欄で全日程）" autocomplete="off" style="max-width:100%">
+      <p class="hint">Cookie欄に値があれば保存して使います。空欄なら保存済みの過去・DB用 Cookie を使います。</p>
+      <p>
+        <button type="button" id="btnQuickRun" class="btn-acc-primary" style="background:#0284c7">最短実行（保存→蓄積→結果取得）</button>
+      </p>
+      <div id="quickRunStatus" class="quick-status">待機中: 最短実行を押すと、ここに進捗を表示します。</div>
     </div>
 
     <div class="panel">
@@ -172,6 +188,9 @@
     const btnBulkAccumulate = document.getElementById('btnBulkAccumulate');
     const accBulkAllDateEl = document.getElementById('accBulkAllDate');
     const btnBulkAllList = document.getElementById('btnBulkAllList');
+    const quickDateEl = document.getElementById('quickDate');
+    const btnQuickRun = document.getElementById('btnQuickRun');
+    const quickRunStatusEl = document.getElementById('quickRunStatus');
 
     async function refreshStatus() {
       try {
@@ -349,6 +368,63 @@
           alert('通信エラー: ' + e.message);
         } finally {
           btnBulkAllList.disabled = false;
+        }
+      });
+    }
+
+    if (btnQuickRun) {
+      btnQuickRun.addEventListener('click', async function () {
+        var dateOnly = quickDateEl && quickDateEl.value.trim() ? quickDateEl.value.trim() : '';
+        var confirmText =
+          '最短実行を開始します。\n' +
+          '1) Cookie保存（入力がある場合）\n' +
+          '2) 全会場一括蓄積\n' +
+          '3) 結果自動取得\n\n' +
+          (dateOnly ? '対象日: ' + dateOnly + '\n' : '対象日: 一覧に表示中の全開催\n') +
+          'よろしいですか？';
+        if (!confirm(confirmText)) return;
+        btnQuickRun.disabled = true;
+        if (quickRunStatusEl) quickRunStatusEl.textContent = '実行中...（数分かかることがあります）';
+        try {
+          var body = {
+            cookie: cookieEl.value.trim(),
+            saveCookie: true,
+            fetchResults: true,
+          };
+          if (dateOnly) body.date = dateOnly;
+          var res = await fetch('/api/accumulate/quick-run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            credentials: 'include',
+          });
+          var data = await res.json();
+          if (!data.ok) {
+            if (quickRunStatusEl) {
+              quickRunStatusEl.innerHTML = '失敗: ' + (data.error || 'unknown') + (data.hint ? '<br>' + data.hint : '');
+            }
+            return;
+          }
+          var a = data.accumulation || {};
+          var lines = [];
+          lines.push('完了: ' + Math.round((data.durationMs || 0) / 1000) + '秒');
+          lines.push('蓄積: 会場ブロック ' + (a.venueBlocks || 0) + ' / レース ' + (a.totalRaces || 0));
+          lines.push('新規保存: ' + (a.totalSaved || 0) + ' / 重複スキップ: ' + (a.totalSkippedDuplicates || 0) + ' / 失敗: ' + (a.totalFailed || 0));
+          if (Array.isArray(data.results) && data.results.length > 0) {
+            data.results.forEach(function (r) {
+              lines.push('結果取得[' + r.date + ']: 取得 ' + (r.fetched || 0) + ' / スキップ ' + (r.skipped || 0) + ' / 失敗 ' + (r.failed || 0));
+            });
+          } else {
+            lines.push('結果取得: 実行なし');
+          }
+          lines.push('次: 「蓄積の確認・結果」でRPT別傾向を確認し、条件を調整');
+          if (quickRunStatusEl) quickRunStatusEl.innerHTML = lines.join('<br>');
+          await refreshStatus();
+          await refreshAccStatus();
+        } catch (e) {
+          if (quickRunStatusEl) quickRunStatusEl.textContent = '通信エラー: ' + e.message;
+        } finally {
+          btnQuickRun.disabled = false;
         }
       });
     }

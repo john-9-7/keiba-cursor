@@ -820,6 +820,87 @@ app.post('/api/accumulate/result', (req, res) => {
  * 蓄積済みスナップショットのうち meetingDate が一致し、結果未登録のレースのみ取得
  */
 const FETCH_RESULTS_CONCURRENCY = Math.min(Math.max(parseInt(process.env.FETCH_RESULTS_CONCURRENCY || '2', 10), 1), 4);
+
+async function fetchResultsForDate(dateStr) {
+  const snaps = getSnapshotsByDate(dateStr, 500);
+  if (snaps.length === 0) {
+    return {
+      ok: true,
+      date: dateStr,
+      message: '指定日の蓄積スナップショットがありません。',
+      fetched: 0,
+      skipped: 0,
+      failed: 0,
+    };
+  }
+  const existing = readAllResultsLatestByRaceId();
+  const listRes = await fetchRaceListForDate(dateStr);
+  if (!listRes.ok || !listRes.map) {
+    return {
+      ok: false,
+      statusCode: 502,
+      error: listRes.error || 'netkeiba のレース一覧を取得できませんでした。',
+    };
+  }
+  const map = listRes.map;
+  const toFetch = snaps.filter((s) => {
+    const rid = s.raceId != null ? Number(s.raceId) : NaN;
+    if (Number.isNaN(rid) || rid < 1) return false;
+    if (existing.has(rid)) return false;
+    const venue = (s.venue || '').trim();
+    const idx = s.raceIndex != null ? Number(s.raceIndex) : NaN;
+    if (!venue || Number.isNaN(idx) || idx < 1) return false;
+    const key = `${venue}\t${idx}`;
+    return map.has(key);
+  });
+  const results = { fetched: 0, skipped: snaps.length - toFetch.length, failed: 0, errors: [] };
+  let cursor = 0;
+  async function worker() {
+    for (;;) {
+      const i = cursor++;
+      if (i >= toFetch.length) return;
+      const s = toFetch[i];
+      const rid = Number(s.raceId);
+      const key = `${(s.venue || '').trim()}\t${Number(s.raceIndex)}`;
+      const netkeibaId = map.get(key);
+      if (!netkeibaId) {
+        results.skipped += 1;
+        return;
+      }
+      const fr = await fetchResultByRaceId(netkeibaId);
+      if (!fr.ok || !fr.result) {
+        results.failed += 1;
+        results.errors.push({ raceId: rid, venue: s.venue, error: fr.error || '取得失敗' });
+        return;
+      }
+      try {
+        appendResult({
+          raceId: rid,
+          first: fr.result.first,
+          second: fr.result.second,
+          third: fr.result.third,
+          finishOrder: fr.result.finishOrder,
+          note: `netkeiba自動取得 ${netkeibaId}`,
+        });
+        results.fetched += 1;
+      } catch (e) {
+        results.failed += 1;
+        results.errors.push({ raceId: rid, error: e.message });
+      }
+    }
+  }
+  const n = Math.min(FETCH_RESULTS_CONCURRENCY, Math.max(1, toFetch.length));
+  await Promise.all(Array.from({ length: n }, () => worker()));
+  return {
+    ok: true,
+    date: dateStr,
+    fetched: results.fetched,
+    skipped: results.skipped,
+    failed: results.failed,
+    errors: results.errors.length > 0 ? results.errors.slice(0, 10) : undefined,
+  };
+}
+
 app.post('/api/accumulate/fetch-results', async (req, res) => {
   const { date } = req.body || {};
   const dateStr = String(date || '').trim();
@@ -827,87 +908,152 @@ app.post('/api/accumulate/fetch-results', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'date を指定してください（例: 2026-03-15）。' });
   }
   try {
-    const snaps = getSnapshotsByDate(dateStr, 500);
-    if (snaps.length === 0) {
-      return res.json({
-        ok: true,
-        date: dateStr,
-        message: '指定日の蓄積スナップショットがありません。',
-        fetched: 0,
-        skipped: 0,
-        failed: 0,
-        accumulator: getAccumulatorStatus(),
-      });
-    }
-    const existing = readAllResultsLatestByRaceId();
-    const listRes = await fetchRaceListForDate(dateStr);
-    if (!listRes.ok || !listRes.map) {
-      return res.status(502).json({
+    const out = await fetchResultsForDate(dateStr);
+    if (!out.ok) {
+      return res.status(out.statusCode || 500).json({
         ok: false,
-        error: listRes.error || 'netkeiba のレース一覧を取得できませんでした。',
+        error: out.error || '結果取得に失敗しました。',
       });
     }
-    const map = listRes.map;
-    const toFetch = snaps.filter((s) => {
-      const rid = s.raceId != null ? Number(s.raceId) : NaN;
-      if (Number.isNaN(rid) || rid < 1) return false;
-      if (existing.has(rid)) return false;
-      const venue = (s.venue || '').trim();
-      const idx = s.raceIndex != null ? Number(s.raceIndex) : NaN;
-      if (!venue || Number.isNaN(idx) || idx < 1) return false;
-      const key = `${venue}\t${idx}`;
-      return map.has(key);
-    });
-    const results = { fetched: 0, skipped: snaps.length - toFetch.length, failed: 0, errors: [] };
-    let cursor = 0;
-    async function worker() {
-      for (;;) {
-        const i = cursor++;
-        if (i >= toFetch.length) return;
-        const s = toFetch[i];
-        const rid = Number(s.raceId);
-        const key = `${(s.venue || '').trim()}\t${Number(s.raceIndex)}`;
-        const netkeibaId = map.get(key);
-        if (!netkeibaId) {
-          results.skipped += 1;
-          return;
-        }
-        const fr = await fetchResultByRaceId(netkeibaId);
-        if (!fr.ok || !fr.result) {
-          results.failed += 1;
-          results.errors.push({ raceId: rid, venue: s.venue, error: fr.error || '取得失敗' });
-          return;
-        }
-        try {
-          appendResult({
-            raceId: rid,
-            first: fr.result.first,
-            second: fr.result.second,
-            third: fr.result.third,
-            finishOrder: fr.result.finishOrder,
-            note: `netkeiba自動取得 ${netkeibaId}`,
-          });
-          results.fetched += 1;
-        } catch (e) {
-          results.failed += 1;
-          results.errors.push({ raceId: rid, error: e.message });
-        }
-      }
-    }
-    const n = Math.min(FETCH_RESULTS_CONCURRENCY, toFetch.length);
-    await Promise.all(Array.from({ length: n }, () => worker()));
     res.json({
       ok: true,
-      date: dateStr,
-      fetched: results.fetched,
-      skipped: results.skipped,
-      failed: results.failed,
-      errors: results.errors.length > 0 ? results.errors.slice(0, 10) : undefined,
+      date: out.date,
+      message: out.message,
+      fetched: out.fetched,
+      skipped: out.skipped,
+      failed: out.failed,
+      errors: out.errors,
       accumulator: getAccumulatorStatus(),
     });
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message || '結果取得に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/accumulate/quick-run
+ * 最短導線: Cookie保存（任意）→ 全会場一括蓄積 → 結果自動取得
+ * Body: { cookie?: string, date?: string, saveCookie?: boolean, fetchResults?: boolean }
+ */
+app.post('/api/accumulate/quick-run', async (req, res) => {
+  const dateFilter =
+    req.body?.date && typeof req.body.date === 'string' && req.body.date.trim()
+      ? req.body.date.trim()
+      : null;
+  const saveCookieEnabled = req.body?.saveCookie !== false;
+  const fetchResultsEnabled = req.body?.fetchResults !== false;
+  const cookieRaw = typeof req.body?.cookie === 'string' ? req.body.cookie : '';
+
+  try {
+    if (cookieRaw.trim() && saveCookieEnabled) {
+      saveKeibaSession(cookieRaw, 'archive');
+    }
+    const cookieStr = resolveKeibaCookie(cookieRaw, 'archive');
+    if (!cookieStr) {
+      return res.status(400).json({
+        ok: false,
+        error: '過去・DB用 Cookie がありません。',
+        hint: '最初だけ Cookie を貼って保存してください。以降は保存済みのまま実行できます。',
+      });
+    }
+
+    const listHeaders = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      Referer: 'https://web.keibacluster.com/top/race-list',
+      Cookie: cookieStr,
+    };
+    const response = await fetch(RACE_LIST_URL, { method: 'GET', headers: listHeaders, redirect: 'follow' });
+    if (!response.ok) {
+      return res.status(200).json({ ok: false, error: `レース一覧: HTTP ${response.status}` });
+    }
+    const html = await response.text();
+    const v = validateRaceListHtml(html);
+    if (!v.ok) {
+      return res.status(200).json({ ok: false, error: v.error });
+    }
+    const list = listDatesAndVenues(html);
+    if (!list.ok || !list.items || list.items.length === 0) {
+      return res.status(200).json({
+        ok: false,
+        error: list.error || '日付・会場の一覧が取得できませんでした。',
+      });
+    }
+
+    const seen = new Set();
+    const pairs = [];
+    for (const it of list.items) {
+      if (dateFilter && it.date !== dateFilter) continue;
+      const key = `${it.date}\t${it.venue}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      pairs.push({ date: it.date, venue: it.venue });
+    }
+    if (pairs.length === 0) {
+      return res.status(200).json({
+        ok: false,
+        error: dateFilter ? `日付「${dateFilter}」の開催が一覧にありません。` : '開催の組み合わせがありません。',
+      });
+    }
+
+    const startedAt = Date.now();
+    let totalSaved = 0;
+    let totalSkippedDuplicates = 0;
+    let totalFailed = 0;
+    let totalRaces = 0;
+    for (const pair of pairs) {
+      const out = await runAccumulateVenueDay({
+        listHtml: html,
+        cookieStr,
+        date: pair.date,
+        venue: pair.venue,
+        purpose: 'archive',
+        snapshotSource: 'quick-run',
+      });
+      if (out.ok) {
+        totalSaved += out.saved;
+        totalSkippedDuplicates += out.skippedDuplicates || 0;
+        totalFailed += out.failed ? out.failed.length : 0;
+        totalRaces += out.total;
+      } else {
+        totalFailed += 1;
+      }
+    }
+
+    const resultDates = fetchResultsEnabled
+      ? (dateFilter ? [dateFilter] : [...new Set(pairs.map((p) => p.date))])
+      : [];
+    const resultRuns = [];
+    for (const d of resultDates) {
+      const out = await fetchResultsForDate(d);
+      resultRuns.push(
+        out.ok
+          ? out
+          : { ok: false, date: d, fetched: 0, skipped: 0, failed: 0, error: out.error || '結果取得に失敗しました。' },
+      );
+    }
+
+    return res.json({
+      ok: true,
+      mode: 'quick-run',
+      dateFilter,
+      savedCookie: !!cookieRaw.trim() && saveCookieEnabled,
+      accumulation: {
+        venueBlocks: pairs.length,
+        totalRaces,
+        totalSaved,
+        totalSkippedDuplicates,
+        totalFailed,
+      },
+      results: resultRuns,
+      durationMs: Date.now() - startedAt,
+      accumulator: getAccumulatorStatus(),
+      hint: 'Cookie は期限切れまで再入力不要です。次回は空欄でそのまま最短実行できます。',
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: err.message || '最短実行に失敗しました。' });
   }
 });
 
