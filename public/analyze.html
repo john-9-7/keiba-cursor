@@ -81,6 +81,17 @@
       </ol>
     </div>
 
+    <div class="panel">
+      <h2>過去・DB用 Cookie の保存</h2>
+      <p class="hint" style="margin-top:0">ここでの保存は常に <strong>過去開催・DB取り込み用</strong> スロットに入ります。今日の追跡用は <a href="/today.html">今日のレース</a> ページで保存してください。</p>
+      <label for="cookie">Cookie</label>
+      <textarea id="cookie" placeholder="laravel_session=... （2行で TOKEN だけでも可）"></textarea>
+      <p class="hint">サーバーに保存すると、iPhone では「今日のレース」ページで保存済み＋「過去・DB用」ラジオを選べば使えます。</p>
+      <p id="sessionStatus">セッション状態を確認中...</p>
+      <button type="button" id="btnSaveArchive">過去・DB用としてサーバーに保存</button>
+      <button type="button" id="btnClearArchive" class="btn-secondary">過去・DB用の保存を削除</button>
+    </div>
+
     <div class="panel" style="border:2px solid #0ea5e9;background:#f0f9ff">
       <h2>最短実行（おすすめ）</h2>
       <p class="hint" style="margin-top:0">
@@ -95,17 +106,6 @@
         <button type="button" id="btnSwitchDateMode" class="btn-acc-primary btn-secondary" style="margin-top:8px;background:#475569">日付切替モード（保存削除→新Cookie入力）</button>
       </p>
       <div id="quickRunStatus" class="quick-status">待機中: 最短実行を押すと、ここに進捗を表示します。</div>
-    </div>
-
-    <div class="panel">
-      <h2>過去・DB用 Cookie の保存</h2>
-      <p class="hint" style="margin-top:0">ここでの保存は常に <strong>過去開催・DB取り込み用</strong> スロットに入ります。今日の追跡用は <a href="/today.html">今日のレース</a> ページで保存してください。</p>
-      <label for="cookie">Cookie</label>
-      <textarea id="cookie" placeholder="laravel_session=... （2行で TOKEN だけでも可）"></textarea>
-      <p class="hint">サーバーに保存すると、iPhone では「今日のレース」ページで保存済み＋「過去・DB用」ラジオを選べば使えます。</p>
-      <p id="sessionStatus">セッション状態を確認中...</p>
-      <button type="button" id="btnSaveArchive">過去・DB用としてサーバーに保存</button>
-      <button type="button" id="btnClearArchive" class="btn-secondary">過去・DB用の保存を削除</button>
     </div>
 
     <details class="panel" style="padding-top:10px;padding-bottom:10px">
