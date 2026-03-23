@@ -253,21 +253,6 @@
           });
           html += '</div>';
         }
-        function histTable(title, hist) {
-          if (!hist || typeof hist !== 'object') return '';
-          var ks = Object.keys(hist).sort(function (a, b) { return parseInt(a, 10) - parseInt(b, 10); });
-          if (!ks.length) return '';
-          var t = '<p style="font-size:0.8rem;font-weight:600;margin:12px 0 6px">' + esc(title) + '</p>';
-          t += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>BB順位</th><th>件数</th></tr></thead><tbody>';
-          ks.forEach(function (k) {
-            t += '<tr><td>' + esc(k) + '位</td><td>' + hist[k] + '</td></tr>';
-          });
-          t += '</tbody></table></div>';
-          return t;
-        }
-        html += histTable('1着馬のBB順位の分布（結果あり・順位取得できたレース）', s.firstPlaceBbRankHistogram);
-        html += histTable('2着馬のBB順位の分布', s.secondPlaceBbRankHistogram);
-        html += histTable('3着馬のBB順位の分布', s.thirdPlaceBbRankHistogram);
         if (keys.length) {
           html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>条件的中</th><th>的中率</th><th>BB最高=1着</th><th>BB最高=1着率</th></tr></thead><tbody>';
           keys.forEach(function (k) {
@@ -301,53 +286,6 @@
           });
           html += '</tbody></table></div>';
 
-          html += '<p style="font-size:0.82rem;font-weight:600;margin:14px 0 6px;color:#334155">RPT別 1着BB順位（件数）</p>';
-          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>1位</th><th>2位</th><th>3位</th><th>4位以下</th></tr></thead><tbody>';
-          keys.forEach(function (k) {
-            var b = byRpt[k] || {};
-            var h = b.firstHist || {};
-            var r1 = Number(h['1'] || 0);
-            var r2 = Number(h['2'] || 0);
-            var r3 = Number(h['3'] || 0);
-            var other = 0;
-            Object.keys(h).forEach(function (rk) {
-              if (rk !== '1' && rk !== '2' && rk !== '3') other += Number(h[rk] || 0);
-            });
-            html += '<tr><td>' + esc(k) + '</td><td>' + r1 + '</td><td>' + r2 + '</td><td>' + r3 + '</td><td>' + other + '</td></tr>';
-          });
-          html += '</tbody></table></div>';
-
-          html += '<p style="font-size:0.82rem;font-weight:600;margin:14px 0 6px;color:#334155">RPT別 2着BB順位（件数）</p>';
-          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>1位</th><th>2位</th><th>3位</th><th>4位以下</th></tr></thead><tbody>';
-          keys.forEach(function (k) {
-            var b = byRpt[k] || {};
-            var h = b.secondHist || {};
-            var r1 = Number(h['1'] || 0);
-            var r2 = Number(h['2'] || 0);
-            var r3 = Number(h['3'] || 0);
-            var other = 0;
-            Object.keys(h).forEach(function (rk) {
-              if (rk !== '1' && rk !== '2' && rk !== '3') other += Number(h[rk] || 0);
-            });
-            html += '<tr><td>' + esc(k) + '</td><td>' + r1 + '</td><td>' + r2 + '</td><td>' + r3 + '</td><td>' + other + '</td></tr>';
-          });
-          html += '</tbody></table></div>';
-
-          html += '<p style="font-size:0.82rem;font-weight:600;margin:14px 0 6px;color:#334155">RPT別 3着BB順位（件数）</p>';
-          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>1位</th><th>2位</th><th>3位</th><th>4位以下</th></tr></thead><tbody>';
-          keys.forEach(function (k) {
-            var b = byRpt[k] || {};
-            var h = b.thirdHist || {};
-            var r1 = Number(h['1'] || 0);
-            var r2 = Number(h['2'] || 0);
-            var r3 = Number(h['3'] || 0);
-            var other = 0;
-            Object.keys(h).forEach(function (rk) {
-              if (rk !== '1' && rk !== '2' && rk !== '3') other += Number(h[rk] || 0);
-            });
-            html += '<tr><td>' + esc(k) + '</td><td>' + r1 + '</td><td>' + r2 + '</td><td>' + r3 + '</td><td>' + other + '</td></tr>';
-          });
-          html += '</tbody></table></div>';
         }
         el.innerHTML = html;
       } catch (e) {
@@ -377,14 +315,23 @@
         var r1 = r.firstBbRank != null ? r.firstBbRank : '—';
         var r2 = r.secondBbRank != null ? r.secondBbRank : '—';
         var r3 = r.thirdBbRank != null ? r.thirdBbRank : '—';
-        var rec = r.suggestedSummary || '—';
+        var rec = '—';
+        if (r.actualBets && typeof r.actualBets === 'object') {
+          var parts = [];
+          if (r.actualBets.umaren) parts.push('馬連:' + r.actualBets.umaren);
+          if (r.actualBets.wide) parts.push('ワイド:' + r.actualBets.wide);
+          if (r.actualBets.umatan) parts.push('馬単:' + r.actualBets.umatan);
+          if (r.actualBets.sanrenpuku) parts.push('3連複:' + r.actualBets.sanrenpuku);
+          if (r.actualBets.sanrentan) parts.push('3連単:' + r.actualBets.sanrentan);
+          if (parts.length > 0) rec = parts.join(' / ');
+        }
         var hitText = '—';
         var hitClass = '';
         if (r.result && r.verdict === '買い') {
-          if (r.buyHitFirst === true) {
+          if (r.hitByType && r.hitByType.anyHit === true) {
             hitText = '的中';
             hitClass = 'tag-hit';
-          } else if (r.buyHitFirst === false) {
+          } else if (r.hitByType && r.hitByType.anyHit === false) {
             hitText = '不的中';
             hitClass = 'tag-miss';
           }
@@ -468,18 +415,19 @@
         'secondBbRank',
         'thirdBbRank',
         'bbTopIsFirst',
-        'buyHitFirst',
-        'suggestedHorseNumbers',
-        'suggestedSummary',
-        'recommend',
+        'hitAny',
+        'betUmaren',
+        'betWide',
+        'betUmatan',
+        'betSanrenpuku',
+        'betSanrentan',
       ];
       var lines = [headers.join(',')];
       for (var i = 0; i < mergedRows.length; i++) {
         var r = mergedRows[i];
         var res = r.result || {};
-        var rec = r.recommend ? String(r.recommend).replace(/\r?\n/g, ' ') : '';
-        var suggestedNums = Array.isArray(r.suggestedHorseNumbers) ? r.suggestedHorseNumbers.join('-') : '';
-        var suggestedSummary = r.suggestedSummary ? String(r.suggestedSummary).replace(/\r?\n/g, ' ') : '';
+        var hitAny = r.hitByType ? r.hitByType.anyHit : null;
+        var bets = r.actualBets || {};
         lines.push(
           [
             csvCell(r.savedAt),
@@ -497,10 +445,12 @@
             csvCell(r.secondBbRank),
             csvCell(r.thirdBbRank),
             csvCell(r.bbTopIsFirst),
-            csvCell(r.buyHitFirst),
-            csvCell(suggestedNums),
-            csvCell(suggestedSummary),
-            csvCell(rec),
+            csvCell(hitAny),
+            csvCell(bets.umaren || ''),
+            csvCell(bets.wide || ''),
+            csvCell(bets.umatan || ''),
+            csvCell(bets.sanrenpuku || ''),
+            csvCell(bets.sanrentan || ''),
           ].join(',')
         );
       }
