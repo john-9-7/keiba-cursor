@@ -56,6 +56,8 @@
     .err { color: #b91c1c; font-size: 0.875rem; }
     .form-row { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-end; margin-bottom: 10px; }
     .form-row > div { flex: 0 0 auto; }
+    .sim-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 10px; }
+    .sim-controls label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 500; }
   </style>
 </head>
 <body>
@@ -168,6 +170,13 @@
 
   <script>
     var mergedRows = [];
+    var selectedTicketTypes = {
+      umaren: true,
+      wide: true,
+      umatan: true,
+      sanrenpuku: true,
+      sanrentan: true,
+    };
 
     function esc(s) {
       if (s == null || s === '') return '';
@@ -217,15 +226,31 @@
         html += '<div class="stat-card"><div class="num">' + esc((s.roiPercent || 0).toFixed(1)) + '%</div><div class="lbl">全体回収率<br>(払戻/投資)</div></div>';
         html += '</div>';
         html += '<p class="hint">' + esc(s.legend) + '</p>';
+        html += '<p style="font-size:0.82rem;font-weight:700;margin:10px 0 6px;color:#0f172a">券種ON/OFFシミュレーション</p>';
+        html += '<div class="sim-controls">';
+        html += '<label><input type="checkbox" data-ticket-type="umaren"' + (selectedTicketTypes.umaren ? ' checked' : '') + '>馬連</label>';
+        html += '<label><input type="checkbox" data-ticket-type="wide"' + (selectedTicketTypes.wide ? ' checked' : '') + '>ワイド</label>';
+        html += '<label><input type="checkbox" data-ticket-type="umatan"' + (selectedTicketTypes.umatan ? ' checked' : '') + '>馬単</label>';
+        html += '<label><input type="checkbox" data-ticket-type="sanrenpuku"' + (selectedTicketTypes.sanrenpuku ? ' checked' : '') + '>3連複</label>';
+        html += '<label><input type="checkbox" data-ticket-type="sanrentan"' + (selectedTicketTypes.sanrentan ? ' checked' : '') + '>3連単</label>';
+        html += '</div>';
         if (s.totalByType) {
-          html += '<p style="font-size:0.82rem;font-weight:700;margin:10px 0 6px;color:#0f172a">券種別 回収状況（全RPT合算）</p>';
+          var totalStakeSel = 0;
+          var totalPayoutSel = 0;
+          var ticketTypes = ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'];
           html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>券種</th><th>投資(円)</th><th>払戻(円)</th><th>回収率</th></tr></thead><tbody>';
-          ['umaren','wide','umatan','sanrenpuku','sanrentan'].forEach(function (t) {
+          ticketTypes.forEach(function (t) {
             var v = s.totalByType[t] || { stake: 0, payout: 0 };
+            if (selectedTicketTypes[t]) {
+              totalStakeSel += Number(v.stake || 0);
+              totalPayoutSel += Number(v.payout || 0);
+            }
             var r = v.stake > 0 ? Math.round((v.payout / v.stake) * 1000) / 10 : 0;
             var nameMap = { umaren: '馬連', wide: 'ワイド', umatan: '馬単', sanrenpuku: '3連複', sanrentan: '3連単' };
-            html += '<tr><td>' + nameMap[t] + '</td><td>' + Number(v.stake || 0).toLocaleString('ja-JP') + '</td><td>' + Number(v.payout || 0).toLocaleString('ja-JP') + '</td><td>' + r.toFixed(1) + '%</td></tr>';
+            html += '<tr><td>' + nameMap[t] + (selectedTicketTypes[t] ? '' : '（OFF）') + '</td><td>' + Number(v.stake || 0).toLocaleString('ja-JP') + '</td><td>' + Number(v.payout || 0).toLocaleString('ja-JP') + '</td><td>' + r.toFixed(1) + '%</td></tr>';
           });
+          var totalRoiSel = totalStakeSel > 0 ? Math.round((totalPayoutSel / totalStakeSel) * 1000) / 10 : 0;
+          html += '<tr><th>選択中 合計</th><th>' + totalStakeSel.toLocaleString('ja-JP') + '</th><th>' + totalPayoutSel.toLocaleString('ja-JP') + '</th><th>' + totalRoiSel.toFixed(1) + '%</th></tr>';
           html += '</tbody></table></div>';
         }
         if (keys.length) {
@@ -266,6 +291,16 @@
           html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>RPT</th><th>件数</th><th>結果あり</th><th>買い</th><th>見送り</th><th>買い+結果</th><th>条件的中</th><th>的中率</th><th>投資(円)</th><th>払戻(円)</th><th>回収率</th><th>BB最高=1着</th><th>BB最高=1着率</th></tr></thead><tbody>';
           keys.forEach(function (k) {
             var b = byRpt[k];
+            var stakeSel = 0;
+            var payoutSel = 0;
+            ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'].forEach(function (t) {
+              var vt = b.byType && b.byType[t] ? b.byType[t] : { stake: 0, payout: 0 };
+              if (selectedTicketTypes[t]) {
+                stakeSel += Number(vt.stake || 0);
+                payoutSel += Number(vt.payout || 0);
+              }
+            });
+            var roiSel = stakeSel > 0 ? Math.round((payoutSel / stakeSel) * 1000) / 10 : 0;
             var rate = b.buyWithResult > 0 ? Math.round((b.bbTopFirstWhenBuy / b.buyWithResult) * 1000) / 10 : 0;
             var hitRate = b.buyWithResult > 0 ? Math.round((b.buyHitFirst / b.buyWithResult) * 1000) / 10 : 0;
             html +=
@@ -287,11 +322,11 @@
               esc(hitRate.toFixed(1)) +
               '%' +
               '</td><td>' +
-              Number(b.totalStake || 0).toLocaleString('ja-JP') +
+              Number(stakeSel || 0).toLocaleString('ja-JP') +
               '</td><td>' +
-              Number(b.totalPayout || 0).toLocaleString('ja-JP') +
+              Number(payoutSel || 0).toLocaleString('ja-JP') +
               '</td><td>' +
-              esc((b.roiPercent || 0).toFixed(1)) +
+              esc((roiSel || 0).toFixed(1)) +
               '%' +
               '</td><td>' +
               b.bbTopFirstWhenBuy +
@@ -304,6 +339,15 @@
 
         }
         el.innerHTML = html;
+        var cbs = el.querySelectorAll('input[type="checkbox"][data-ticket-type]');
+        cbs.forEach(function (cb) {
+          cb.addEventListener('change', function (ev) {
+            var key = ev.target.getAttribute('data-ticket-type');
+            if (!key) return;
+            selectedTicketTypes[key] = !!ev.target.checked;
+            loadStats();
+          });
+        });
       } catch (e) {
         el.innerHTML = '<p class="err">' + esc(e.message) + '</p>';
       }
