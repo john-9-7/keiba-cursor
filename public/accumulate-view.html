@@ -49,6 +49,8 @@
     table.data th { position: sticky; top: 0; background: #fff; z-index: 1; text-align: left; }
     .tag-buy { color: #166534; font-weight: 600; }
     .tag-skip { color: #991b1b; font-weight: 600; }
+    .tag-hit { color: #166534; font-weight: 700; }
+    .tag-miss { color: #991b1b; font-weight: 700; }
     .muted { color: #94a3b8; }
     .row-tools { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
     .err { color: #b91c1c; font-size: 0.875rem; }
@@ -153,6 +155,7 @@
               <th>判定</th>
               <th>BB最高馬</th>
               <th>1-2-3着</th>
+              <th>条件的中</th>
               <th>1着BB順</th>
               <th>2着BB順</th>
               <th>3着BB順</th>
@@ -375,6 +378,20 @@
         var r2 = r.secondBbRank != null ? r.secondBbRank : '—';
         var r3 = r.thirdBbRank != null ? r.thirdBbRank : '—';
         var rec = r.suggestedSummary || '—';
+        var hitText = '—';
+        var hitClass = '';
+        if (r.result && r.verdict === '買い') {
+          if (r.buyHitFirst === true) {
+            hitText = '的中';
+            hitClass = 'tag-hit';
+          } else if (r.buyHitFirst === false) {
+            hitText = '不的中';
+            hitClass = 'tag-miss';
+          }
+        } else if (r.result && r.verdict !== '買い') {
+          hitText = '対象外';
+        }
+
         html +=
           '<tr><td>' +
           esc((r.savedAt || '').replace('T', ' ').slice(0, 19)) +
@@ -392,6 +409,10 @@
           esc(r.topBbHorse != null ? r.topBbHorse : '—') +
           '</td><td>' +
           esc(place) +
+          '</td><td class="' +
+          hitClass +
+          '">' +
+          esc(hitText) +
           '</td><td>' +
           esc(r1) +
           '</td><td>' +
