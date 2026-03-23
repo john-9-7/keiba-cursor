@@ -148,18 +148,15 @@
         <table class="data" id="tbl">
           <thead>
             <tr>
-              <th>保存日時</th>
               <th>開催</th>
-              <th>race_id</th>
+              <th>何レース目</th>
               <th>RPT</th>
               <th>判定</th>
-              <th>BB最高馬</th>
               <th>1-2-3着</th>
               <th>条件的中</th>
               <th>1着BB順</th>
               <th>2着BB順</th>
               <th>3着BB順</th>
-              <th>BB最高=1着</th>
               <th>買い目（実際）</th>
             </tr>
           </thead>
@@ -317,7 +314,7 @@
       var err = document.getElementById('tableErr');
       err.style.display = 'none';
       if (!rows || !rows.length) {
-        tb.innerHTML = '<tr><td colspan="13" class="muted">データがありません。analyze で一括蓄積するか、しばらく待ってから再読み込みしてください。</td></tr>';
+        tb.innerHTML = '<tr><td colspan="9" class="muted">データがありません。analyze で一括蓄積するか、しばらく待ってから再読み込みしてください。</td></tr>';
         return;
       }
       var html = '';
@@ -330,7 +327,6 @@
         }
         var v = r.verdict || '—';
         var vcls = v === '買い' ? 'tag-buy' : v === '見送り' ? 'tag-skip' : '';
-        var bbMatch = r.bbTopIsFirst === true ? '○' : r.bbTopIsFirst === false ? '×' : '—';
         var r1 = r.firstBbRank != null ? r.firstBbRank : '—';
         var r2 = r.secondBbRank != null ? r.secondBbRank : '—';
         var r3 = r.thirdBbRank != null ? r.thirdBbRank : '—';
@@ -360,19 +356,15 @@
 
         html +=
           '<tr><td>' +
-          esc((r.savedAt || '').replace('T', ' ').slice(0, 19)) +
-          '</td><td>' +
           esc([r.meetingDate, r.venue].filter(Boolean).join(' ') || '—') +
           '</td><td>' +
-          esc(r.raceId) +
+          esc(r.raceIndex != null ? (r.raceIndex + 'R') : '—') +
           '</td><td>' +
           esc(r.rpt != null ? r.rpt : '—') +
           '</td><td class="' +
           vcls +
           '">' +
           esc(v) +
-          '</td><td>' +
-          esc(r.topBbHorse != null ? r.topBbHorse : '—') +
           '</td><td>' +
           esc(place) +
           '</td><td class="' +
@@ -385,8 +377,6 @@
           esc(r2) +
           '</td><td>' +
           esc(r3) +
-          '</td><td>' +
-          bbMatch +
           '</td><td style="max-width:200px;word-break:break-all">' +
           esc(rec) +
           '</td></tr>';
