@@ -638,7 +638,7 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
     /** @type {Array<{ date: string, venue: string }>} */
     let pairs = [];
     for (const it of list.items) {
-      if (dateFilter && it.date !== dateFilter) continue;
+      if (dateFilter && raceListYmdKey(it.date) !== raceListYmdKey(dateFilter)) continue;
       const key = `${it.date}\t${it.venue}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -649,6 +649,8 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
       return res.status(200).json({
         ok: false,
         error: dateFilter ? `日付「${dateFilter}」の開催が一覧にありません。` : '開催の組み合わせがありません。',
+        hint:
+          'Cookieが「その日のレース一覧」を表示できる状態か確認してください。日付で絞る欄を**空**にすると、一覧に載っている**最新の開催日**だけを自動で選びます。',
       });
     }
 
@@ -864,6 +866,19 @@ function enumerateDates(startYmd, endYmd, maxDays = 120) {
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return { ok: true, dates: out };
+}
+
+/**
+ * レース一覧 HTML の data-date と、フォームの type=date（YYYY-MM-DD）を同一視する
+ * @param {string} d
+ * @returns {string} YYYYMMDD または比較不能時は空
+ */
+function raceListYmdKey(d) {
+  const raw = String(d || '').trim();
+  if (!raw) return '';
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 8) return digits.slice(0, 8);
+  return '';
 }
 
 /**
@@ -1146,7 +1161,7 @@ app.post('/api/accumulate/quick-run', async (req, res) => {
     const seen = new Set();
     const pairs = [];
     for (const it of list.items) {
-      if (dateFilter && it.date !== dateFilter) continue;
+      if (dateFilter && raceListYmdKey(it.date) !== raceListYmdKey(dateFilter)) continue;
       const key = `${it.date}\t${it.venue}`;
       if (seen.has(key)) continue;
       seen.add(key);
@@ -1156,6 +1171,8 @@ app.post('/api/accumulate/quick-run', async (req, res) => {
       return res.status(200).json({
         ok: false,
         error: dateFilter ? `日付「${dateFilter}」の開催が一覧にありません。` : '開催の組み合わせがありません。',
+        hint:
+          'Cookieが「その日のレース一覧」を表示できる状態か確認してください。日付で絞る欄を**空**にすると、一覧に載っている**最新の開催日**だけを自動で選びます。',
       });
     }
 
