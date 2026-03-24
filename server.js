@@ -599,7 +599,7 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
   };
   if (cookieStr) listHeaders.Cookie = cookieStr;
 
-  const dateFilter =
+  const requestedDateFilter =
     req.body?.date && typeof req.body.date === 'string' && req.body.date.trim()
       ? req.body.date.trim()
       : null;
@@ -630,6 +630,9 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
         error: list.error || '日付・会場の一覧が取得できませんでした。',
       });
     }
+
+    const resolvedDate = resolveDateFilter(list.items, requestedDateFilter);
+    const dateFilter = resolvedDate.dateFilter;
 
     const seen = new Set();
     /** @type {Array<{ date: string, venue: string }>} */
@@ -693,6 +696,7 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
     res.json({
       ok: true,
       dateFilter: dateFilter || null,
+      autoSelectedDate: resolvedDate.autoSelected ? dateFilter : null,
       venueBlocks: pairs.length,
       totalRaces,
       totalSaved,
@@ -702,7 +706,7 @@ app.post('/api/accumulate/bulk-all-list', async (req, res) => {
       venues,
       accumulator: getAccumulatorStatus(),
       hint:
-        '処理に数分〜十数分かかることがあります。Render 等で HTTP タイムアウト（30秒など）のときは、このAPIは途中で切れることがあります。Request timeout を延ばすか、date で1日分に絞るか、会場単位の「bulk-venue」を利用してください。',
+        '処理に数分〜十数分かかることがあります。Render 等で HTTP タイムアウト（30秒など）のときは、このAPIは途中で切れることがあります。Request timeout を延ばすか、会場単位の「bulk-venue」を利用してください。',
     });
   } catch (err) {
     console.error(err);
@@ -860,6 +864,20 @@ function enumerateDates(startYmd, endYmd, maxDays = 120) {
     cur.setUTCDate(cur.getUTCDate() + 1);
   }
   return { ok: true, dates: out };
+}
+
+/**
+ * date未指定時は一覧の最新日を自動採用
+ * @param {Array<{ date?: string }>} items
+ * @param {string|null} requested
+ */
+function resolveDateFilter(items, requested) {
+  if (requested && String(requested).trim()) {
+    return { dateFilter: String(requested).trim(), autoSelected: false };
+  }
+  const dates = [...new Set((items || []).map((x) => String(x.date || '').trim()).filter(Boolean))].sort();
+  if (dates.length === 0) return { dateFilter: null, autoSelected: false };
+  return { dateFilter: dates[dates.length - 1], autoSelected: true };
 }
 
 function hasPayoutPayload(row) {
@@ -1078,7 +1096,7 @@ app.post('/api/accumulate/backfill-payouts-range', async (req, res) => {
  * Body: { cookie?: string, date?: string, saveCookie?: boolean, fetchResults?: boolean }
  */
 app.post('/api/accumulate/quick-run', async (req, res) => {
-  const dateFilter =
+  const requestedDateFilter =
     req.body?.date && typeof req.body.date === 'string' && req.body.date.trim()
       ? req.body.date.trim()
       : null;
@@ -1121,6 +1139,9 @@ app.post('/api/accumulate/quick-run', async (req, res) => {
         error: list.error || '日付・会場の一覧が取得できませんでした。',
       });
     }
+
+    const resolvedDate = resolveDateFilter(list.items, requestedDateFilter);
+    const dateFilter = resolvedDate.dateFilter;
 
     const seen = new Set();
     const pairs = [];
@@ -1179,6 +1200,7 @@ app.post('/api/accumulate/quick-run', async (req, res) => {
       ok: true,
       mode: 'quick-run',
       dateFilter,
+      autoSelectedDate: resolvedDate.autoSelected ? dateFilter : null,
       savedCookie: !!cookieRaw.trim() && saveCookieEnabled,
       accumulation: {
         venueBlocks: pairs.length,
@@ -1190,7 +1212,7 @@ app.post('/api/accumulate/quick-run', async (req, res) => {
       results: resultRuns,
       durationMs: Date.now() - startedAt,
       accumulator: getAccumulatorStatus(),
-      hint: 'Cookie は期限切れまで再入力不要です。次回は空欄でそのまま最短実行できます。',
+      hint: 'Cookie は期限切れまで再入力不要です。次回は空欄でそのまま最短実行できます（空欄時は一覧の最新開催日を自動選択）。',
     });
   } catch (err) {
     console.error(err);

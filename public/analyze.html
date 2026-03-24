@@ -98,8 +98,8 @@
         このボタンで <strong>Cookie保存（任意）→ 全会場一括蓄積 → 結果自動取得（netkeiba）</strong> をまとめて実行します。
         <br>回収率の厳密算出には「払戻データ」が必要なため、現状は <strong>RPT別の結果・的中傾向</strong> までを最短で蓄積します。
       </p>
-      <label for="quickDate">日付で絞る（任意・空欄なら一覧に表示中の全開催）</label>
-      <input type="text" id="quickDate" placeholder="例: 2026-03-22（空欄で全日程）" autocomplete="off" style="max-width:100%">
+      <label for="quickDate">日付で絞る（任意・空欄なら一覧の最新開催日を自動選択）</label>
+      <input type="text" id="quickDate" placeholder="例: 2026-03-22（空欄なら自動選択）" autocomplete="off" style="max-width:100%">
       <p class="hint">Cookie欄に値があれば保存して使います。空欄なら保存済みの過去・DB用 Cookie を使います。</p>
       <p>
         <button type="button" id="btnQuickRun" class="btn-acc-primary" style="background:#0284c7">最短実行（保存→蓄積→結果取得）</button>
@@ -125,8 +125,8 @@
     <div class="panel" style="border:2px solid #a78bfa;background:#faf5ff">
       <h2>一覧の全会場・全レースを一気に取り込む（超一括）</h2>
       <p class="hint" style="margin-top:0">レース一覧ページに <strong>その Cookie で表示されている</strong> すべての「日付×会場」について、各会場の全レースを<strong>順に</strong>蓄積します。手動で会場を選ぶ必要はありません。</p>
-      <label for="accBulkAllDate">日付で絞る（任意・空欄＝一覧に出ている開催すべて）</label>
-      <input type="text" id="accBulkAllDate" placeholder="例: 2026-03-22（空欄で全日程）" autocomplete="off" style="max-width:100%">
+      <label for="accBulkAllDate">日付で絞る（任意・空欄＝一覧の最新開催日を自動選択）</label>
+      <input type="text" id="accBulkAllDate" placeholder="例: 2026-03-22（空欄なら自動選択）" autocomplete="off" style="max-width:100%">
       <p class="hint">例: 開催が1日だけなら空欄でOK。複数日が一覧に混ざるときは、<strong>1日分だけ取りたい日付</strong>を入れるとその日の会場だけ処理します。</p>
       <button type="button" id="btnBulkAllList" class="btn-acc-primary" style="background:#7c3aed;margin-top:8px">全会場まとめて蓄積する</button>
       <p class="hint" style="margin-bottom:0"><strong>注意：</strong>会場数×レース数だけAPIを叩くため<strong>数分〜十数分以上</strong>かかります。<strong>Render の無料枠</strong>など HTTP タイムアウトが短いと<strong>途中で切れる</strong>ことがあります。そのときは Render の timeout 延長、または下の「1会場ずつ（①〜④）」を利用してください。<br><strong>重複：</strong>同じ <code>race_id</code> は既に蓄積済みなら<strong>追記しません</strong>（再実行しても二重になりません）。</p>
@@ -407,7 +407,7 @@
         var dateOnly = accBulkAllDateEl && accBulkAllDateEl.value.trim() ? accBulkAllDateEl.value.trim() : '';
         var msg =
           'レース一覧に表示されている' +
-          (dateOnly ? '「' + dateOnly + '」の' : '**すべての日付・会場**の') +
+          (dateOnly ? '「' + dateOnly + '」の' : '（空欄なので最新開催日を自動選択して）') +
           '各レースを順に蓄積します。時間がかかり、ホスティングによってはタイムアウトで失敗することがあります。続行しますか？';
         if (!confirm(msg.replace(/\*\*/g, ''))) return;
         btnBulkAllList.disabled = true;
@@ -423,6 +423,7 @@
           var data = await res.json();
           if (data.ok) {
             var s =
+              (data.autoSelectedDate ? '自動選択日: ' + data.autoSelectedDate + '\n' : '') +
               '会場ブロック: ' +
               data.venueBlocks +
               ' · レース合計: ' +
@@ -458,7 +459,7 @@
           '1) Cookie保存（入力がある場合）\n' +
           '2) 全会場一括蓄積\n' +
           '3) 結果自動取得\n\n' +
-          (dateOnly ? '対象日: ' + dateOnly + '\n' : '対象日: 一覧に表示中の全開催\n') +
+          (dateOnly ? '対象日: ' + dateOnly + '\n' : '対象日: 空欄のため最新開催日を自動選択\n') +
           'よろしいですか？';
         if (!confirm(confirmText)) return;
         btnQuickRun.disabled = true;
@@ -486,6 +487,7 @@
           var a = data.accumulation || {};
           var lines = [];
           lines.push('完了: ' + Math.round((data.durationMs || 0) / 1000) + '秒');
+          if (data.autoSelectedDate) lines.push('自動選択日: ' + data.autoSelectedDate);
           lines.push('蓄積: 会場ブロック ' + (a.venueBlocks || 0) + ' / レース ' + (a.totalRaces || 0));
           lines.push('新規保存: ' + (a.totalSaved || 0) + ' / 重複スキップ: ' + (a.totalSkippedDuplicates || 0) + ' / 失敗: ' + (a.totalFailed || 0));
           if (Array.isArray(data.results) && data.results.length > 0) {
