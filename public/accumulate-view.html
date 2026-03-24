@@ -127,7 +127,7 @@
 
     <div class="panel">
       <h2>結果を自動取得（netkeiba）</h2>
-      <p class="hint" style="margin-top:0">指定日の蓄積スナップショットのうち、結果未登録のレースについて netkeiba から着順を取得し results に追記します。中央競馬（中山・中京・阪神など）のみ対応。</p>
+      <p class="hint" style="margin-top:0">指定日の蓄積スナップショットに対して netkeiba から結果を取得します。通常は「結果を自動取得」、払戻が空の既存レースを補完したいときは「払戻だけ再取得」を使ってください。</p>
       <div class="form-row">
         <div>
           <label for="inFetchDate">対象日</label>
@@ -135,6 +135,7 @@
         </div>
         <div style="align-self:flex-end">
           <button type="button" id="btnFetchResults">結果を自動取得</button>
+          <button type="button" id="btnBackfillPayouts" class="btn-secondary">払戻だけ再取得</button>
         </div>
       </div>
       <p id="fetchResultMsg" class="hint" style="margin:8px 0 0 0"></p>
@@ -651,6 +652,46 @@
         msg.textContent = e.message || '通信エラー';
       } finally {
         btn.disabled = false;
+      }
+    });
+
+    document.getElementById('btnBackfillPayouts').addEventListener('click', async function () {
+      var msg = document.getElementById('fetchResultMsg');
+      msg.textContent = '';
+      var dateVal = document.getElementById('inFetchDate').value.trim();
+      if (!dateVal) {
+        msg.textContent = '対象日を選択してください。';
+        return;
+      }
+      var btnA = document.getElementById('btnFetchResults');
+      var btnB = document.getElementById('btnBackfillPayouts');
+      btnA.disabled = true;
+      btnB.disabled = true;
+      msg.textContent = '払戻バックフィル中...';
+      try {
+        var res = await fetch('/api/accumulate/backfill-payouts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ date: dateVal }),
+        });
+        var data = await res.json();
+        if (data.ok) {
+          var txt = '完了: ' + data.fetched + ' 件の払戻を補完';
+          if (data.skipped > 0) txt += '、' + data.skipped + ' 件スキップ';
+          if (data.failed > 0) txt += '、' + data.failed + ' 件失敗';
+          if (data.errors && data.errors.length) txt += '（' + data.errors[0].error + ' 等）';
+          msg.textContent = txt;
+          await loadStats();
+          await loadMerged();
+        } else {
+          msg.textContent = data.error || '失敗しました。';
+        }
+      } catch (e) {
+        msg.textContent = e.message || '通信エラー';
+      } finally {
+        btnA.disabled = false;
+        btnB.disabled = false;
       }
     });
 

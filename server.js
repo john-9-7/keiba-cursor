@@ -822,7 +822,16 @@ app.post('/api/accumulate/result', (req, res) => {
  */
 const FETCH_RESULTS_CONCURRENCY = Math.min(Math.max(parseInt(process.env.FETCH_RESULTS_CONCURRENCY || '2', 10), 1), 4);
 
-async function fetchResultsForDate(dateStr) {
+function hasPayoutPayload(row) {
+  if (!row || !row.payouts || typeof row.payouts !== 'object') return false;
+  return ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'].some((k) => {
+    const arr = row.payouts[k];
+    return Array.isArray(arr) && arr.length > 0;
+  });
+}
+
+async function fetchResultsForDate(dateStr, opts = {}) {
+  const backfillPayouts = opts.backfillPayouts === true;
   const snaps = getSnapshotsByDate(dateStr, 500);
   if (snaps.length === 0) {
     return {
@@ -847,7 +856,10 @@ async function fetchResultsForDate(dateStr) {
   const toFetch = snaps.filter((s) => {
     const rid = s.raceId != null ? Number(s.raceId) : NaN;
     if (Number.isNaN(rid) || rid < 1) return false;
-    if (existing.has(rid)) return false;
+    if (existing.has(rid)) {
+      const ex = existing.get(rid);
+      if (!backfillPayouts || hasPayoutPayload(ex)) return false;
+    }
     const venue = (s.venue || '').trim();
     const idx = s.raceIndex != null ? Number(s.raceIndex) : NaN;
     if (!venue || Number.isNaN(idx) || idx < 1) return false;
@@ -930,6 +942,41 @@ app.post('/api/accumulate/fetch-results', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message || '結果取得に失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/accumulate/backfill-payouts
+ * 既存結果があるレースのうち、払戻情報が空のものへ netkeiba 払戻を再取得して追記
+ * Body: { "date": "2026-03-15" }
+ */
+app.post('/api/accumulate/backfill-payouts', async (req, res) => {
+  const { date } = req.body || {};
+  const dateStr = String(date || '').trim();
+  if (!dateStr || !/^\d{4}[-/]?\d{1,2}[-/]?\d{1,2}$/.test(dateStr.replace(/-/g, '-'))) {
+    return res.status(400).json({ ok: false, error: 'date を指定してください（例: 2026-03-15）。' });
+  }
+  try {
+    const out = await fetchResultsForDate(dateStr, { backfillPayouts: true });
+    if (!out.ok) {
+      return res.status(out.statusCode || 500).json({
+        ok: false,
+        error: out.error || '払戻バックフィルに失敗しました。',
+      });
+    }
+    res.json({
+      ok: true,
+      date: out.date,
+      message: '払戻バックフィルを実行しました。',
+      fetched: out.fetched,
+      skipped: out.skipped,
+      failed: out.failed,
+      errors: out.errors,
+      accumulator: getAccumulatorStatus(),
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ ok: false, error: err.message || '払戻バックフィルに失敗しました。' });
   }
 });
 
