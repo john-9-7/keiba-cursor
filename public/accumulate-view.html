@@ -187,6 +187,7 @@
 
   <script>
     var mergedRows = [];
+    var backfillRangeProgressTimer = null;
     var selectedTicketTypes = {
       umaren: true,
       wide: true,
@@ -216,6 +217,14 @@
         .split(/[,、\s]+/)
         .map(function (x) { return parseInt(x.trim(), 10); })
         .filter(function (n) { return !isNaN(n) && n >= 1; });
+    }
+
+    function daysBetweenInclusive(startYmd, endYmd) {
+      if (!startYmd || !endYmd) return 0;
+      var s = new Date(startYmd + 'T00:00:00Z');
+      var e = new Date(endYmd + 'T00:00:00Z');
+      if (isNaN(s.getTime()) || isNaN(e.getTime()) || s.getTime() > e.getTime()) return 0;
+      return Math.floor((e.getTime() - s.getTime()) / (24 * 60 * 60 * 1000)) + 1;
     }
 
     var TICKET_TYPE_KEYS = ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'];
@@ -720,10 +729,17 @@
       var btnA = document.getElementById('btnFetchResults');
       var btnB = document.getElementById('btnBackfillPayouts');
       var btnC = document.getElementById('btnBackfillPayoutsRange');
+      var totalDays = daysBetweenInclusive(startVal, endVal);
+      var startedAt = Date.now();
       btnA.disabled = true;
       btnB.disabled = true;
       btnC.disabled = true;
-      msg.textContent = '期間バックフィル中...';
+      if (backfillRangeProgressTimer) clearInterval(backfillRangeProgressTimer);
+      msg.textContent = '期間バックフィル中...（対象 ' + totalDays + '日）';
+      backfillRangeProgressTimer = setInterval(function () {
+        var sec = Math.floor((Date.now() - startedAt) / 1000);
+        msg.textContent = '期間バックフィル中...（対象 ' + totalDays + '日 / 経過 ' + sec + ' 秒）';
+      }, 1000);
       try {
         var res = await fetch('/api/accumulate/backfill-payouts-range', {
           method: 'POST',
@@ -737,6 +753,10 @@
             '完了: ' + (data.dateCount || 0) + '日 / 払戻補完 ' + (data.totalFetched || 0) + ' 件';
           if (data.totalSkipped > 0) txt += '、' + data.totalSkipped + ' 件スキップ';
           if (data.totalFailed > 0) txt += '、' + data.totalFailed + ' 件失敗';
+          if (Array.isArray(data.daily) && data.daily.length > 0) {
+            var bad = data.daily.filter(function (d) { return d && d.ok === false; }).map(function (d) { return d.date; });
+            if (bad.length > 0) txt += '（失敗日: ' + bad.slice(0, 5).join(', ') + (bad.length > 5 ? ' ...' : '') + '）';
+          }
           msg.textContent = txt;
           await loadStats();
           await loadMerged();
@@ -746,6 +766,10 @@
       } catch (e) {
         msg.textContent = e.message || '通信エラー';
       } finally {
+        if (backfillRangeProgressTimer) {
+          clearInterval(backfillRangeProgressTimer);
+          backfillRangeProgressTimer = null;
+        }
         btnA.disabled = false;
         btnB.disabled = false;
         btnC.disabled = false;
