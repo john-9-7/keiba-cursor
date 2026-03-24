@@ -345,7 +345,7 @@
           alert(data.error || '保存に失敗しました。');
         }
       } catch (e) {
-        alert('通信エラー: ' + e.message);
+        alert('通信エラー: ' + formatFetchErrorDetail(e));
       } finally {
         btnSaveArchive.disabled = false;
       }
@@ -365,7 +365,7 @@
         if (data.ok) await refreshStatus();
         else alert(data.error || '削除に失敗しました。');
       } catch (e) {
-        alert('通信エラー: ' + e.message);
+        alert('通信エラー: ' + formatFetchErrorDetail(e));
       } finally {
         btnClearArchive.disabled = false;
       }

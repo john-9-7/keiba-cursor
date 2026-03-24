@@ -406,7 +406,7 @@
           alert(data.error || '保存に失敗しました。');
         }
       } catch (e) {
-        alert('通信エラー: ' + e.message);
+        alert('通信エラー: ' + formatFetchErrorDetail(e));
       } finally {
         btnSaveSession.disabled = false;
       }
@@ -464,7 +464,7 @@
         await refreshSessionStatus();
         return true;
       } catch (e) {
-        alert('通信エラー: ' + e.message);
+        alert('通信エラー: ' + formatFetchErrorDetail(e));
         return false;
       } finally {
         btnSaveSession.disabled = false;
