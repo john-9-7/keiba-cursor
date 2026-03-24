@@ -192,6 +192,7 @@
     </details>
   </div>
 
+  <script src="/read-json-response.js"></script>
   <script>
     const cookieEl = document.getElementById('cookie');
     const sessionStatusEl = document.getElementById('sessionStatus');
@@ -266,7 +267,7 @@
     async function refreshStatus() {
       try {
         const res = await fetch('/api/keiba-session/status', { credentials: 'include' });
-        const data = await res.json();
+        const data = await readJsonResponse(res);
         if (!data) return;
         var line = '過去・DB用: ';
         if (data.hasSavedArchive) {
@@ -301,7 +302,7 @@
           body: JSON.stringify({ cookie: c, cookiePurpose: 'archive' }),
           credentials: 'include',
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) {
           alert(data.message || '保存しました。');
           await refreshStatus();
@@ -325,7 +326,7 @@
           body: JSON.stringify({ cookiePurpose: 'archive' }),
           credentials: 'include',
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) await refreshStatus();
         else alert(data.error || '削除に失敗しました。');
       } catch (e) {
@@ -339,7 +340,7 @@
       if (!accStatusEl) return;
       try {
         var res = await fetch('/api/accumulate/status', { credentials: 'include' });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) {
           accStatusEl.innerHTML =
             'スナップショット: <strong>' + data.snapshotsCount + '</strong> 件 · 結果メモ: <strong>' + data.resultsCount + '</strong> 件<br>' +
@@ -365,7 +366,7 @@
             body: JSON.stringify({ cookiePurpose: 'archive' }),
             credentials: 'include',
           });
-          var data = await res.json();
+          var data = await readJsonResponse(res);
           if (!data.ok) {
             alert(data.error || '一覧の取得に失敗しました。Cookie を確認してください。');
             return;
@@ -420,7 +421,7 @@
             body: JSON.stringify(body),
             credentials: 'include',
           });
-          var data = await res.json();
+          var data = await readJsonResponse(res);
           if (data.ok) {
             var s =
               (data.autoSelectedDate ? '自動選択日: ' + data.autoSelectedDate + '\n' : '') +
@@ -477,7 +478,7 @@
             body: JSON.stringify(body),
             credentials: 'include',
           });
-          var data = await res.json();
+          var data = await readJsonResponse(res);
           if (!data.ok) {
             if (quickRunStatusEl) {
               quickRunStatusEl.innerHTML = '失敗: ' + (data.error || 'unknown') + (data.hint ? '<br>' + data.hint : '');
@@ -527,7 +528,7 @@
             body: JSON.stringify({ cookiePurpose: 'archive' }),
             credentials: 'include',
           });
-          var data = await res.json();
+          var data = await readJsonResponse(res);
           if (!data.ok) {
             if (quickRunStatusEl) quickRunStatusEl.textContent = '削除に失敗: ' + (data.error || 'unknown');
             return;
@@ -565,7 +566,7 @@
             body: JSON.stringify({ date: d, venue: v, cookiePurpose: 'archive' }),
             credentials: 'include',
           });
-          var data = await res.json();
+          var data = await readJsonResponse(res);
           if (data.ok) {
             var msg =
               '新規保存: ' +

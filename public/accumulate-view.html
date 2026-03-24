@@ -185,6 +185,7 @@
     </div>
   </div>
 
+  <script src="/read-json-response.js"></script>
   <script>
     var mergedRows = [];
     var backfillRangeProgressTimer = null;
@@ -254,7 +255,7 @@
       var el = document.getElementById('statsArea');
       try {
         var res = await fetch('/api/accumulate/stats?limit=500', { credentials: 'include' });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (!data.ok) {
           el.innerHTML = '<p class="err">' + esc(data.error || '取得失敗') + '</p>';
           return;
@@ -498,7 +499,7 @@
       err.style.display = 'none';
       try {
         var res = await fetch('/api/accumulate/merged?limit=' + lim, { credentials: 'include' });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (!data.ok) {
           err.textContent = data.error || '取得に失敗しました。';
           err.style.display = 'block';
@@ -620,7 +621,7 @@
           credentials: 'include',
           body: JSON.stringify(body),
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) {
           msg.textContent = '保存しました。一覧を更新します。';
           document.getElementById('inFirst').value = '';
@@ -658,7 +659,7 @@
           credentials: 'include',
           body: JSON.stringify({ date: dateVal }),
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) {
           var txt = '完了: ' + data.fetched + ' 件取得';
           if (data.skipped > 0) txt += '、' + data.skipped + ' 件スキップ';
@@ -697,7 +698,7 @@
           credentials: 'include',
           body: JSON.stringify({ date: dateVal }),
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) {
           var txt = '完了: ' + data.fetched + ' 件の払戻を補完';
           if (data.skipped > 0) txt += '、' + data.skipped + ' 件スキップ';
@@ -747,7 +748,7 @@
           credentials: 'include',
           body: JSON.stringify({ startDate: startVal, endDate: endVal }),
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) {
           var txt =
             '完了: ' + (data.dateCount || 0) + '日 / 払戻補完 ' + (data.totalFetched || 0) + ' 件';

@@ -189,6 +189,7 @@
     <div id="result"></div>
   </div>
 
+  <script src="/read-json-response.js"></script>
   <script>
     const cookieEl = document.getElementById('cookie');
     const urlEl = document.getElementById('url');
@@ -287,7 +288,7 @@
     async function refreshSessionStatus() {
       try {
         const res = await fetch('/api/keiba-session/status', { credentials: 'include' });
-        const data = await res.json();
+        const data = await readJsonResponse(res);
         sessionLiveOk = !!(data && data.hasSavedLive);
         sessionArchiveOk = !!(data && data.hasSavedArchive);
         if (data) {
@@ -387,7 +388,7 @@
           body: JSON.stringify({ cookie: c, cookiePurpose: purposeSaving }),
           credentials: 'include',
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (data.ok) {
           var msg = data.message;
           if (!msg) {
@@ -422,7 +423,7 @@
             body: JSON.stringify({ cookiePurpose: purpose }),
             credentials: 'include',
           });
-          var data = await res.json();
+          var data = await readJsonResponse(res);
           if (data.ok) {
             await refreshSessionStatus();
           } else {
@@ -453,7 +454,7 @@
           body: JSON.stringify({ cookie: c, cookiePurpose: purposeSaving }),
           credentials: 'include',
         });
-        var data = await res.json();
+        var data = await readJsonResponse(res);
         if (!data.ok) {
           alert(data.error || '保存に失敗しました。');
           return false;
@@ -590,7 +591,7 @@
         credentials: 'include',
       })
         .then(function (r) {
-          return r.json();
+          return readJsonResponse(r);
         })
         .then(function (data) {
           renderDashboardResponse(data);
@@ -638,7 +639,7 @@
         body: JSON.stringify(Object.assign({}, cookieRequestBase(), { raceId: raceId })),
         credentials: 'include',
       })
-        .then(function (r) { return r.json(); })
+        .then(function (r) { return readJsonResponse(r); })
         .then(function (data) {
           if (data.ok) {
             var h = formatJudgmentHtml(data.judgment);
@@ -683,7 +684,7 @@
           body: JSON.stringify({ raceId: raceId, oddsText: textEl.value.trim() }),
           credentials: 'include',
         })
-          .then(function (r) { return r.json(); })
+          .then(function (r) { return readJsonResponse(r); })
           .then(function (data) {
             if (data.ok) {
               resultEl.innerHTML = formatJudgmentHtml(data.judgment);
@@ -715,7 +716,7 @@
           body: JSON.stringify(cookieRequestBase()),
           credentials: 'include',
         });
-        const data = await res.json();
+        const data = await readJsonResponse(res);
         if (data.ok && data.datesAndVenues && data.datesAndVenues.length > 0) {
           dateVenueItems = data.datesAndVenues;
           let html = '<p class="result success">日付・会場を取得しました。下で選択して「レース一覧を表示」を押してください。</p>';
@@ -756,7 +757,7 @@
         ),
         credentials: 'include',
       })
-        .then(function (r) { return r.json(); })
+        .then(function (r) { return readJsonResponse(r); })
         .then(function (data) {
           if (data.ok && data.races && data.races.length > 0) {
             currentRaces = data.races;
