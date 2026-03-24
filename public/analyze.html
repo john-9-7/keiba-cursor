@@ -220,6 +220,38 @@
       results: 0,
     };
 
+    var LS_ANALYZE = 'keiba.analyze.prefs.v1';
+
+    function persistAnalyzePrefs() {
+      try {
+        localStorage.setItem(
+          LS_ANALYZE,
+          JSON.stringify({
+            quickDate: quickDateEl ? quickDateEl.value : '',
+            accBulkAllDate: accBulkAllDateEl ? accBulkAllDateEl.value : '',
+            accDate: accDateEl ? accDateEl.value : '',
+            accVenue: accVenueEl ? accVenueEl.value : '',
+          })
+        );
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
+    function restoreAnalyzePrefs() {
+      try {
+        var raw = localStorage.getItem(LS_ANALYZE);
+        if (!raw) return;
+        var o = JSON.parse(raw);
+        if (quickDateEl && o.quickDate) quickDateEl.value = o.quickDate;
+        if (accBulkAllDateEl && o.accBulkAllDate) accBulkAllDateEl.value = o.accBulkAllDate;
+        if (accDateEl && o.accDate != null) accDateEl.value = o.accDate;
+        if (accVenueEl && o.accVenue != null) accVenueEl.value = o.accVenue;
+      } catch (e) {
+        /* ignore */
+      }
+    }
+
     function renderNowCard() {
       if (!nowBadgesEl || !nowNextEl) return;
       var badges = [];
@@ -342,9 +374,15 @@
         var res = await fetch('/api/accumulate/status', { credentials: 'include' });
         var data = await readJsonResponse(res);
         if (data.ok) {
+          var warn = '';
+          if (data.usesKeibaDataDir === false) {
+            warn =
+              '<br><span style="color:#f59e0b;font-size:0.75rem">KEIBA_DATA_DIR 未設定です。Render 等では再起動でデータが消えることがあります。</span>';
+          }
           accStatusEl.innerHTML =
             'スナップショット: <strong>' + data.snapshotsCount + '</strong> 件 · 結果メモ: <strong>' + data.resultsCount + '</strong> 件<br>' +
-            '<span style="color:#94a3b8;font-size:0.75rem">保存先: ' + (data.snapshotsPath || '') + '</span>';
+            '<span style="color:#94a3b8;font-size:0.75rem">保存先: ' + (data.snapshotsPath || '') + '</span>' +
+            warn;
           state.snapshots = Number(data.snapshotsCount || 0);
           state.results = Number(data.resultsCount || 0);
           renderNowCard();
@@ -399,9 +437,15 @@
         if (parts.length >= 2) {
           accDateEl.value = parts[0];
           accVenueEl.value = parts[1];
+          persistAnalyzePrefs();
         }
       });
     }
+
+    if (quickDateEl) quickDateEl.addEventListener('change', persistAnalyzePrefs);
+    if (accBulkAllDateEl) accBulkAllDateEl.addEventListener('change', persistAnalyzePrefs);
+    if (accDateEl) accDateEl.addEventListener('change', persistAnalyzePrefs);
+    if (accVenueEl) accVenueEl.addEventListener('change', persistAnalyzePrefs);
 
     if (btnBulkAllList) {
       btnBulkAllList.addEventListener('click', async function () {
@@ -592,6 +636,7 @@
       });
     }
 
+    restoreAnalyzePrefs();
     refreshStatus();
     refreshAccStatus();
     renderNowCard();
