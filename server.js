@@ -821,6 +821,46 @@ app.post('/api/accumulate/result', (req, res) => {
  * 蓄積済みスナップショットのうち meetingDate が一致し、結果未登録のレースのみ取得
  */
 const FETCH_RESULTS_CONCURRENCY = Math.min(Math.max(parseInt(process.env.FETCH_RESULTS_CONCURRENCY || '2', 10), 1), 4);
+const DATE_RE = /^\d{4}[-/]?\d{1,2}[-/]?\d{1,2}$/;
+
+function parseDateInput(dateStr) {
+  const s = String(dateStr || '').trim();
+  if (!s || !DATE_RE.test(s)) return null;
+  const parts = s.replace(/\//g, '-').split('-').map((x) => parseInt(x, 10));
+  if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) return null;
+  const [y, m, d] = parts;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (
+    dt.getUTCFullYear() !== y ||
+    dt.getUTCMonth() !== m - 1 ||
+    dt.getUTCDate() !== d
+  ) return null;
+  return dt;
+}
+
+function toYmdUtc(dt) {
+  const y = dt.getUTCFullYear();
+  const m = String(dt.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(dt.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function enumerateDates(startYmd, endYmd, maxDays = 120) {
+  const s = parseDateInput(startYmd);
+  const e = parseDateInput(endYmd);
+  if (!s || !e) return { ok: false, error: '日付形式が不正です。' };
+  if (s.getTime() > e.getTime()) return { ok: false, error: '開始日は終了日以前にしてください。' };
+  const out = [];
+  const cur = new Date(s.getTime());
+  while (cur.getTime() <= e.getTime()) {
+    out.push(toYmdUtc(cur));
+    if (out.length > maxDays) {
+      return { ok: false, error: `一度に処理できる期間は最大${maxDays}日です。` };
+    }
+    cur.setUTCDate(cur.getUTCDate() + 1);
+  }
+  return { ok: true, dates: out };
+}
 
 function hasPayoutPayload(row) {
   if (!row || !row.payouts || typeof row.payouts !== 'object') return false;
@@ -918,7 +958,7 @@ async function fetchResultsForDate(dateStr, opts = {}) {
 app.post('/api/accumulate/fetch-results', async (req, res) => {
   const { date } = req.body || {};
   const dateStr = String(date || '').trim();
-  if (!dateStr || !/^\d{4}[-/]?\d{1,2}[-/]?\d{1,2}$/.test(dateStr.replace(/-/g, '-'))) {
+  if (!parseDateInput(dateStr)) {
     return res.status(400).json({ ok: false, error: 'date を指定してください（例: 2026-03-15）。' });
   }
   try {
@@ -953,7 +993,7 @@ app.post('/api/accumulate/fetch-results', async (req, res) => {
 app.post('/api/accumulate/backfill-payouts', async (req, res) => {
   const { date } = req.body || {};
   const dateStr = String(date || '').trim();
-  if (!dateStr || !/^\d{4}[-/]?\d{1,2}[-/]?\d{1,2}$/.test(dateStr.replace(/-/g, '-'))) {
+  if (!parseDateInput(dateStr)) {
     return res.status(400).json({ ok: false, error: 'date を指定してください（例: 2026-03-15）。' });
   }
   try {
@@ -977,6 +1017,58 @@ app.post('/api/accumulate/backfill-payouts', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ ok: false, error: err.message || '払戻バックフィルに失敗しました。' });
+  }
+});
+
+/**
+ * POST /api/accumulate/backfill-payouts-range
+ * 指定期間の日付を順に処理して、払戻が空の既存結果をまとめてバックフィル
+ * Body: { "startDate": "2026-03-01", "endDate": "2026-03-24" }
+ */
+app.post('/api/accumulate/backfill-payouts-range', async (req, res) => {
+  const startDate = String(req.body?.startDate || '').trim();
+  const endDate = String(req.body?.endDate || '').trim();
+  const list = enumerateDates(startDate, endDate, 120);
+  if (!list.ok) {
+    return res.status(400).json({ ok: false, error: list.error || '期間の指定が不正です。' });
+  }
+  try {
+    const daily = [];
+    let totalFetched = 0;
+    let totalSkipped = 0;
+    let totalFailed = 0;
+    for (const d of list.dates) {
+      const out = await fetchResultsForDate(d, { backfillPayouts: true });
+      if (!out.ok) {
+        daily.push({ date: d, ok: false, error: out.error || '失敗' });
+        totalFailed += 1;
+        continue;
+      }
+      totalFetched += out.fetched || 0;
+      totalSkipped += out.skipped || 0;
+      totalFailed += out.failed || 0;
+      daily.push({
+        date: d,
+        ok: true,
+        fetched: out.fetched || 0,
+        skipped: out.skipped || 0,
+        failed: out.failed || 0,
+      });
+    }
+    return res.json({
+      ok: true,
+      startDate,
+      endDate,
+      dateCount: list.dates.length,
+      totalFetched,
+      totalSkipped,
+      totalFailed,
+      daily,
+      accumulator: getAccumulatorStatus(),
+    });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ ok: false, error: err.message || '期間バックフィルに失敗しました。' });
   }
 });
 

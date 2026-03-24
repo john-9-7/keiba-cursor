@@ -138,6 +138,19 @@
           <button type="button" id="btnBackfillPayouts" class="btn-secondary">払戻だけ再取得</button>
         </div>
       </div>
+      <div class="form-row">
+        <div>
+          <label for="inBackfillStartDate">払戻再取得（期間）開始日</label>
+          <input type="date" id="inBackfillStartDate" placeholder="2026-03-01">
+        </div>
+        <div>
+          <label for="inBackfillEndDate">払戻再取得（期間）終了日</label>
+          <input type="date" id="inBackfillEndDate" placeholder="2026-03-24">
+        </div>
+        <div style="align-self:flex-end">
+          <button type="button" id="btnBackfillPayoutsRange" class="btn-secondary">払戻を期間一括再取得</button>
+        </div>
+      </div>
       <p id="fetchResultMsg" class="hint" style="margin:8px 0 0 0"></p>
     </div>
 
@@ -692,6 +705,50 @@
       } finally {
         btnA.disabled = false;
         btnB.disabled = false;
+      }
+    });
+
+    document.getElementById('btnBackfillPayoutsRange').addEventListener('click', async function () {
+      var msg = document.getElementById('fetchResultMsg');
+      msg.textContent = '';
+      var startVal = document.getElementById('inBackfillStartDate').value.trim();
+      var endVal = document.getElementById('inBackfillEndDate').value.trim();
+      if (!startVal || !endVal) {
+        msg.textContent = '開始日・終了日を選択してください。';
+        return;
+      }
+      var btnA = document.getElementById('btnFetchResults');
+      var btnB = document.getElementById('btnBackfillPayouts');
+      var btnC = document.getElementById('btnBackfillPayoutsRange');
+      btnA.disabled = true;
+      btnB.disabled = true;
+      btnC.disabled = true;
+      msg.textContent = '期間バックフィル中...';
+      try {
+        var res = await fetch('/api/accumulate/backfill-payouts-range', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+          body: JSON.stringify({ startDate: startVal, endDate: endVal }),
+        });
+        var data = await res.json();
+        if (data.ok) {
+          var txt =
+            '完了: ' + (data.dateCount || 0) + '日 / 払戻補完 ' + (data.totalFetched || 0) + ' 件';
+          if (data.totalSkipped > 0) txt += '、' + data.totalSkipped + ' 件スキップ';
+          if (data.totalFailed > 0) txt += '、' + data.totalFailed + ' 件失敗';
+          msg.textContent = txt;
+          await loadStats();
+          await loadMerged();
+        } else {
+          msg.textContent = data.error || '失敗しました。';
+        }
+      } catch (e) {
+        msg.textContent = e.message || '通信エラー';
+      } finally {
+        btnA.disabled = false;
+        btnB.disabled = false;
+        btnC.disabled = false;
       }
     });
 

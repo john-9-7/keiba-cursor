@@ -38,6 +38,7 @@
 - `POST /api/accumulate/result` … `raceId` + 着順などを `results.jsonl` に追記（同一 `race_id` で複数行ある場合、突合では **recordedAt が最新**の行を使用）
 - `POST /api/accumulate/fetch-results` … 指定日の蓄積スナップショットについて、**未登録レース**の結果を **netkeiba** から取得し `results.jsonl` に追記。Body: `{ "date": "2026-03-15" }`。中央競馬（中山・中京・阪神など）のみ対応。同時取得数は `FETCH_RESULTS_CONCURRENCY`（既定2）で調整可。
 - `POST /api/accumulate/backfill-payouts` … 指定日の既存結果のうち **払戻が空のレースだけ** を再取得して追記（バックフィル）。Body: `{ "date": "2026-03-15" }`。
+- `POST /api/accumulate/backfill-payouts-range` … 期間指定で払戻バックフィルを日次実行。Body: `{ "startDate": "2026-03-01", "endDate": "2026-03-24" }`（最大120日）。
 
 ## クラウド（Render 等）について
 
