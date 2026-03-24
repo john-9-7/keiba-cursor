@@ -10,3 +10,4 @@ data/keiba-session-archive.txt
 data/accumulated/*.jsonl
 # RPT・BB キャッシュ（当日分、翌日自動失効）
 data/race-cache.json
+tmp-netkeiba-result.html

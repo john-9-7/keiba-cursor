@@ -8,6 +8,7 @@
     "dev": "node server.js",
     "verify": "node scripts/verify-fetch.js",
     "test:netkeiba": "node scripts/test-netkeiba-parse.js",
+    "test:netkeiba-payout": "node scripts/test-netkeiba-payout-parse.js",
     "test:regression": "node scripts/test-regression.js",
     "test:smoke": "node scripts/test-smoke.js",
     "test:smoke:all": "node scripts/test-smoke-all.js",

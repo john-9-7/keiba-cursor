@@ -897,7 +897,7 @@ function resolveDateFilter(items, requested) {
 
 function hasPayoutPayload(row) {
   if (!row || !row.payouts || typeof row.payouts !== 'object') return false;
-  return ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'].some((k) => {
+  return ['tansho', 'fukusho', 'wakuren', 'umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'].some((k) => {
     const arr = row.payouts[k];
     return Array.isArray(arr) && arr.length > 0;
   });

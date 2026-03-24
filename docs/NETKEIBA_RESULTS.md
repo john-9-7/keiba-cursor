@@ -2,7 +2,22 @@
 
 ## 概要
 
-蓄積したスナップショット（予想時点のデータ）に対し、**netkeiba**（race.netkeiba.com / db.netkeiba.com）から**着順（1〜3着馬番・全着順）**を自動取得し `results.jsonl` に追記する機能です。
+蓄積したスナップショット（予想時点のデータ）に対し、**netkeiba**（race.netkeiba.com / db.netkeiba.com）から**着順（1〜3着馬番・全着順）**と**払戻金**を自動取得し `results.jsonl` に追記する機能です。
+
+### 払戻のデータ形式（`results.jsonl` の `payouts`）
+
+結果ページの **`table.Payout_Detail_Table`**（`tr.Tansho` / `Fukusho` / `Wakuren` / `Umaren` / `Wide` / `Umatan` / `Fuku3` / `Tan3`）をパースします。
+
+| キー | 内容 |
+|------|------|
+| `tansho` | 単勝 `{ key: 馬番, payout }` |
+| `fukusho` | 複勝（頭ごと） |
+| `wakuren` | 枠連 `key` は枠番の小さい順 `"6-7"` |
+| `umaren` / `wide` / `umatan` / `sanrenpuku` / `sanrentan` | 既存と同じ（馬連は昇順キー、馬単・3連単は `>` 順） |
+
+集計画面の回収率は従来どおり **馬連・ワイド・馬単・3連複・3連単** を使用します。単勝・複勝・枠連は JSON に保存され、将来の拡張やエクスポート用です。
+
+古い HTML（`PayBack_Table` のみ）向けのフォールバックも残しています。
 
 ## 使い方
 
