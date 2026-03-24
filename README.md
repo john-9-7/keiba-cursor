@@ -4,15 +4,15 @@
 
 ## ドキュメント
 
-- **[操作手順（操作手順.md）](docs/操作手順.md)** … **本番サーバー**での使い方（URL・環境変数・取得・トラブル）。**無料のままスマホで使いつつ蓄積を残す**工夫は「7. 蓄積データの場所」を参照
-- **[手元PCトンネル（手元PCトンネル.md）](docs/手元PCトンネル.md)** … **Render無料でデータが消える問題の回避**・PCで `npm start` ＋ トンネルでスマホから開く具体的ステップ
-- **`render.yaml`** … Render **Free** 向け Blueprint 例（**永続ディスクなし**・蓄積は再起動で消えることがある点に注意。無料で残す工夫は `docs/操作手順.md` §7）
+- **[操作手順（操作手順.md）](docs/操作手順.md)** … **本番サーバー**での使い方（URL・環境変数・取得・トラブル）
+- **[データ蓄積（ACCUMULATOR.md）](docs/ACCUMULATOR.md)** … **蓄積は手元PC（`npm start` + `data/accumulated/`）が主**・API・`/accumulate-view.html`
+- **[手元PCトンネル（手元PCトンネル.md）](docs/手元PCトンネル.md)** … **任意**・スマホから同じPC上のツールを開きたいときだけ
+- **`render.yaml`** … Render **Free** 向け Web の Blueprint 例（**蓄積の保存先としては非推奨**）
 - **[仕様書（SPEC.md）](docs/SPEC.md)** … 機能要件・判定ロジック・出力フォーマット・データソース等の定義
 - **[プロジェクト1枚要約（PROJECT_ONE_PAGER.md）](docs/PROJECT_ONE_PAGER.md)** … 目的・運用フロー・優先順位を1枚で確認するための基準文書
 - **[次のステップ（NEXT_STEPS.md）](docs/NEXT_STEPS.md)** … 開発の進め方・おすすめの順番
 - **[技術選定（TECH_STACK.md）](docs/TECH_STACK.md)** … 採用技術とプロジェクト構成
 - **[スクレイピング技術仕様（SCRAPING_SPEC.md）](docs/SCRAPING_SPEC.md)** … 競馬クラスターのCookie・race-list/race-analyze の構造とパース仕様
-- **[データ蓄積（ACCUMULATOR.md）](docs/ACCUMULATOR.md)** … `data/accumulated/` の JSONL、API、**`/accumulate-view.html`**（一覧・結果入力・**結果の自動取得（netkeiba）**・CSV・集計）
 - **[netkeiba 結果取得（NETKEIBA_RESULTS.md）](docs/NETKEIBA_RESULTS.md)** … 着順の自動取得の使い方・API・注意事項
 - **[直前オッズで再判定（ODDS_REJUDGE.md）](docs/ODDS_REJUDGE.md)** … RPT・BB キャッシュ ＋ テキスト入力オッズで再判定
 - **[取得の安定性（NETWORK_FETCH.md）](docs/NETWORK_FETCH.md)** … `race-analyze` 取得の共通化・リトライ・`DASHBOARD_FETCH_CONCURRENCY`
@@ -25,7 +25,8 @@
 
 ## 技術・環境
 
-- Windows（PC）・iPhone で利用可能な Web アプリ（または PWA）を想定
+- **蓄積・RPT集計** … **手元PC** のブラウザで `http://localhost:3000`（`npm start`）を前提。データは `data/accumulated/`。
+- **今日のレース等** … PC・スマホのブラウザから本番URLでも利用可（用途に応じて）。
 - 骨組み: Node.js + Express、フロントは HTML/CSS/JS（[技術選定](docs/TECH_STACK.md)）
 
 ## 起動方法
@@ -50,7 +51,9 @@
 4. **ブラウザで開く**  
    [http://localhost:3000](http://localhost:3000) にアクセスする。
 
-5. **データ取得の流れ（B案）**
+5. **蓄積データを溜める・確認する** … **分析・データ蓄積**（`/analyze.html`）と **蓄積の確認・結果**（`/accumulate-view.html`）は、できるだけこの **localhost** から操作してください（保存先はPC内の `data/accumulated/`）。
+
+6. **データ取得の流れ（B案）**
    - ブラウザで [競馬クラスター](https://web.keibacluster.com/top) にログイン（中央競馬を選び、その日のPWで認証）。
    - 会場・レースを選んでデータページ（出馬表）を表示し、**アドレスバーのURL**（`race-analyze-next`）をコピー。
    - 開発者ツール（F12）などで **Cookie**（laravel_session と XSRF-TOKEN）をコピー。

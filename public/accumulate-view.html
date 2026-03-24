@@ -74,7 +74,7 @@
     </nav>
 
     <h1>蓄積データの確認・結果入力</h1>
-    <p class="lead">蓄積したスナップショットと、後から入力した<strong>着順/払戻</strong>を突合します。レース後は <strong>race_id</strong> と1〜3着馬番を登録、または「結果を自動取得（netkeiba）」でまとめて反映してください。</p>
+    <p class="lead">この画面は <strong>手元PC</strong> で <code>npm start</code> したサーバー上の <strong><code>data/accumulated/</code></strong> を読みます。蓄積したスナップショットと、あとから入れた<strong>着順/払戻</strong>を突合します。レース後は <strong>race_id</strong> と1〜3着馬番、または「結果を自動取得（netkeiba）」で反映してください。</p>
     <p id="storageInfoBar" class="hint" style="margin:-6px 0 14px;padding:10px 12px;background:#f1f5f9;border-radius:8px;border:1px solid #e2e8f0">保存先・件数を読み込み中...</p>
 
     <div class="panel" style="border:2px solid #bfdbfe;background:#eff6ff">
@@ -256,10 +256,10 @@
         var warnLine = '';
         if (data.ephemeralDataRisk === true) {
           warnLine =
-            '<br><span style="color:#b45309;font-size:0.78rem">Render の無料枠では一時ストレージのため、<strong>再起動・再デプロイで消える</strong>ことがあります。無料のまま残したいときは <strong>CSV を定期的に保存</strong>するか、<strong>手元PCで起動＋トンネル</strong>でスマホから見る方法を <code>docs/操作手順.md</code> §7 で確認してください。</span>';
+            '<br><span style="color:#b45309;font-size:0.78rem">蓄積は<strong>手元PC</strong>で使う想定です。いまはクラウドの<strong>一時ストレージ</strong>のため、<strong>再デプロイで消える</strong>ことがあります。データを残すなら、このPCで <code>npm start</code> して <code>http://localhost:3000</code> から使ってください。</span>';
         }
         el.innerHTML =
-          '<strong>サーバー上の蓄積</strong>: スナップショット <strong>' +
+          '<strong>蓄積データ</strong>: スナップショット <strong>' +
           esc(String(data.snapshotsCount)) +
           '</strong> 件 · 結果 <strong>' +
           esc(String(data.resultsCount)) +
@@ -270,7 +270,7 @@
           ' · <code style="font-size:0.7rem">' +
           esc(data.snapshotsPath || '') +
           '</code></span>' +
-          '<br><span style="color:#64748b;font-size:0.75rem">※ 通常、画面を更新（F5）してもサーバーの jsonl は消えません。日付・表示件数・券種シミュはこのブラウザに保存し、再表示します。</span>';
+          '<br><span style="color:#64748b;font-size:0.75rem">※ 手元PCでは、通常F5しても <code>.jsonl</code> は消えません。日付・表示件数・券種シミュだけこのブラウザに記憶します。</span>';
       } catch (e) {
         el.textContent = '保存先・件数の取得に失敗しました。';
       }

@@ -63,6 +63,9 @@
     </nav>
 
     <h1>分析・データ蓄積</h1>
+    <p class="hint" style="margin:0 0 14px;padding:10px 12px;background:#ecfeff;border:1px solid #99f6e4;border-radius:8px;color:#115e59;line-height:1.55">
+      <strong>蓄積データ</strong>は <strong>手元PC</strong> で <code>npm start</code> し、<code>http://localhost:3000</code> からこのページと <a href="/accumulate-view.html">蓄積の確認・結果</a>を開く運用を前提にしています。保存先はPC内の <code>data/accumulated/</code> です。
+    </p>
     <div class="now-card">
       <h2>現在の状況（次にやること）</h2>
       <div id="nowBadges" class="now-badges">
@@ -112,7 +115,7 @@
       <summary style="cursor:pointer;font-weight:700;color:#0f766e">保存先の詳細（通常は見なくてOK）</summary>
       <div style="margin-top:10px">
         <p style="font-size:0.875rem;color:#334155;margin:0;line-height:1.6">
-          ツールが動いている<strong>サーバー内</strong>のフォルダ <strong><code class="path">data/accumulated/</code></strong> に保存されます（本番URLで使っているときはクラウド上。手元PCで <code class="path">npm start</code> のときはそのPCのプロジェクト内）。
+          既定では、<strong>手元PC</strong>で <code class="path">npm start</code> したときのプロジェクト内フォルダ <strong><code class="path">data/accumulated/</code></strong> に保存されます（蓄積の主運用をPCに置く想定です）。
         </p>
         <ul style="font-size:0.85rem;color:#475569;line-height:1.6;margin:10px 0 0 1rem">
           <li><code class="path">snapshots.jsonl</code> … 各レースの RPT・馬柱・判定など（1行＝1レース・追記のみ）</li>
@@ -377,7 +380,7 @@
           var warn = '';
           if (data.ephemeralDataRisk === true) {
             warn =
-              '<br><span style="color:#f59e0b;font-size:0.75rem">Render 無料枠の一時ストレージです。消したくない場合は CSV でバックアップするか、PC＋トンネル運用を docs/操作手順 §7 参照。</span>';
+              '<br><span style="color:#f59e0b;font-size:0.75rem">蓄積は手元PC推奨です。いまはクラウドの一時ストレージのため再デプロイで消えることがあります。PCで npm start して localhost から蓄積してください。</span>';
           }
           accStatusEl.innerHTML =
             'スナップショット: <strong>' + data.snapshotsCount + '</strong> 件 · 結果メモ: <strong>' + data.resultsCount + '</strong> 件<br>' +
