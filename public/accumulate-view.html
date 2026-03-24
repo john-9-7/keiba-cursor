@@ -254,9 +254,9 @@
           return;
         }
         var warnLine = '';
-        if (data.usesKeibaDataDir === false) {
+        if (data.ephemeralDataRisk === true) {
           warnLine =
-            '<br><span style="color:#b45309;font-size:0.78rem">KEIBA_DATA_DIR が未設定です。Render などでは再起動・再デプロイでデータが消えることがあります。</span>';
+            '<br><span style="color:#b45309;font-size:0.78rem">このサービスは Render の一時ストレージに蓄積しています。再起動・再デプロイで消えることがあります。<strong>永続ディスク（例: /var/keiba-data）</strong>を付けるか <code>KEIBA_DATA_DIR</code> を設定してください。</span>';
         }
         el.innerHTML =
           '<strong>サーバー上の蓄積</strong>: スナップショット <strong>' +

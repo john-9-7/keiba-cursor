@@ -1,0 +1,34 @@
+# Render Blueprint: 本番URL（スマホ含む）で蓄積データを消さないための設定例
+#
+# 要点:
+# - 永続ディスクを /var/keiba-data にマウント
+# - KEIBA_DATA_DIR でそのパスを指定（コードが accumulated / セッション保存先に使う）
+# - 永続ディスクは有料の Web サービスでのみ利用可（Free では追加不可）
+#   https://render.com/docs/disks
+#
+# 使い方:
+# - 新規: Render ダッシュボードで Blueprint をこのリポジトリから接続
+# - 既存サービス: ダッシュボード → 当該 Web Service → Disks で同じ mountPath を追加し、
+#   Environment に KEIBA_DATA_DIR=/var/keiba-data を設定（コードは変数が無くてもマウントが
+#   あれば Render 上では自動で /var/keiba-data を使います）
+#
+# 次を自分用に直してください: name, region, plan（ディスク付与に必要な有料プラン）
+#
+services:
+  - type: web
+    name: keiba-cursor
+    runtime: node
+    plan: starter
+    region: oregon
+    buildCommand: npm install && npx playwright install chromium
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "20.18.1"
+      - key: KEIBA_DATA_DIR
+        value: /var/keiba-data
+    disk:
+      name: keiba-persist
+      mountPath: /var/keiba-data
+      sizeGB: 1
