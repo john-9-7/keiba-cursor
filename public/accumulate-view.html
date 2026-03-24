@@ -58,6 +58,9 @@
     .form-row > div { flex: 0 0 auto; }
     .sim-controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 8px 0 10px; }
     .sim-controls label { display: inline-flex; align-items: center; gap: 6px; margin: 0; font-weight: 500; }
+    .sim-presets { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 10px; align-items: center; }
+    .sim-presets button { padding: 6px 12px; font-size: 13px; border-radius: 6px; cursor: pointer; border: none; background: #64748b; color: #fff; }
+    .sim-presets button:hover { background: #475569; }
   </style>
 </head>
 <body>
@@ -201,6 +204,29 @@
         .filter(function (n) { return !isNaN(n) && n >= 1; });
     }
 
+    var TICKET_TYPE_KEYS = ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'];
+
+    function applyTicketPreset(preset) {
+      function offAll() {
+        TICKET_TYPE_KEYS.forEach(function (t) { selectedTicketTypes[t] = false; });
+      }
+      if (preset === 'all-on') {
+        TICKET_TYPE_KEYS.forEach(function (t) { selectedTicketTypes[t] = true; });
+      } else if (preset === 'all-off') {
+        offAll();
+      } else if (preset === 'kataome') {
+        offAll();
+        selectedTicketTypes.umaren = true;
+        selectedTicketTypes.wide = true;
+      } else if (preset === 'kohan') {
+        offAll();
+        selectedTicketTypes.umatan = true;
+        selectedTicketTypes.sanrenpuku = true;
+        selectedTicketTypes.sanrentan = true;
+      }
+      loadStats();
+    }
+
     async function loadStats() {
       var el = document.getElementById('statsArea');
       try {
@@ -227,6 +253,13 @@
         html += '</div>';
         html += '<p class="hint">' + esc(s.legend) + '</p>';
         html += '<p style="font-size:0.82rem;font-weight:700;margin:10px 0 6px;color:#0f172a">券種ON/OFFシミュレーション</p>';
+        html += '<p class="hint" style="margin-top:0;margin-bottom:6px">プリセットで一括切替 → すぐ下のチェックで微調整できます。</p>';
+        html += '<div class="sim-presets">';
+        html += '<button type="button" data-ticket-preset="kataome">堅め（馬連+ワイド）</button>';
+        html += '<button type="button" data-ticket-preset="kohan">高配当（馬単+3連複+3連単）</button>';
+        html += '<button type="button" data-ticket-preset="all-on">全ON</button>';
+        html += '<button type="button" data-ticket-preset="all-off">全OFF</button>';
+        html += '</div>';
         html += '<div class="sim-controls">';
         html += '<label><input type="checkbox" data-ticket-type="umaren"' + (selectedTicketTypes.umaren ? ' checked' : '') + '>馬連</label>';
         html += '<label><input type="checkbox" data-ticket-type="wide"' + (selectedTicketTypes.wide ? ' checked' : '') + '>ワイド</label>';
@@ -346,6 +379,13 @@
             if (!key) return;
             selectedTicketTypes[key] = !!ev.target.checked;
             loadStats();
+          });
+        });
+        var presetBtns = el.querySelectorAll('button[data-ticket-preset]');
+        presetBtns.forEach(function (btn) {
+          btn.addEventListener('click', function () {
+            var p = btn.getAttribute('data-ticket-preset');
+            if (p) applyTicketPreset(p);
           });
         });
       } catch (e) {
