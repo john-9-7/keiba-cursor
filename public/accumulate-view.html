@@ -256,7 +256,7 @@
         var warnLine = '';
         if (data.ephemeralDataRisk === true) {
           warnLine =
-            '<br><span style="color:#b45309;font-size:0.78rem">このサービスは Render の一時ストレージに蓄積しています。再起動・再デプロイで消えることがあります。<strong>永続ディスク（例: /var/keiba-data）</strong>を付けるか <code>KEIBA_DATA_DIR</code> を設定してください。</span>';
+            '<br><span style="color:#b45309;font-size:0.78rem">Render の無料枠では一時ストレージのため、<strong>再起動・再デプロイで消える</strong>ことがあります。無料のまま残したいときは <strong>CSV を定期的に保存</strong>するか、<strong>手元PCで起動＋トンネル</strong>でスマホから見る方法を <code>docs/操作手順.md</code> §7 で確認してください。</span>';
         }
         el.innerHTML =
           '<strong>サーバー上の蓄積</strong>: スナップショット <strong>' +

@@ -377,7 +377,7 @@
           var warn = '';
           if (data.ephemeralDataRisk === true) {
             warn =
-              '<br><span style="color:#f59e0b;font-size:0.75rem">Render の一時ストレージに保存中です。永続ディスクまたは KEIBA_DATA_DIR の設定を推奨します（リポジトリの render.yaml 参照）。</span>';
+              '<br><span style="color:#f59e0b;font-size:0.75rem">Render 無料枠の一時ストレージです。消したくない場合は CSV でバックアップするか、PC＋トンネル運用を docs/操作手順 §7 参照。</span>';
           }
           accStatusEl.innerHTML =
             'スナップショット: <strong>' + data.snapshotsCount + '</strong> 件 · 結果メモ: <strong>' + data.resultsCount + '</strong> 件<br>' +
