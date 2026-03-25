@@ -356,8 +356,9 @@
         html +=
           '<p class="hint" style="margin-top:8px">※ 上段の<strong>2番目</strong>と<strong>3番目</strong>の差は、多くの場合<strong>見送り</strong>レースに結果が付いている件数です。払戻（回収率）が抜けているレースは下の<strong>データ欠損チェック</strong>表で確認できます。</p>';
         html += '<p class="hint">' + esc(s.legend) + '</p>';
-        html += '<p style="font-size:0.82rem;font-weight:700;margin:10px 0 6px;color:#0f172a">券種ON/OFFシミュレーション</p>';
-        html += '<p class="hint" style="margin-top:0;margin-bottom:6px">プリセットで一括切替 → すぐ下のチェックで微調整できます。</p>';
+        html += '<p style="font-size:0.82rem;font-weight:700;margin:10px 0 6px;color:#0f172a">券種ON/OFFシミュレーション（RPT別）</p>';
+        html +=
+          '<p class="hint" style="margin-top:0;margin-bottom:6px">プリセットで一括切替 → チェックで券種をON/OFF。各RPTごとに<strong>馬券種別</strong>の投資・払戻・回収率を出し、「選択中 合計」はそのRPT内のON券種のみの合計。下の<strong>全RPT 選択中 合計</strong>が全体の合算です。</p>';
         html += '<div class="sim-presets">';
         html += '<button type="button" data-ticket-preset="kataome">堅め（馬連+ワイド）</button>';
         html += '<button type="button" data-ticket-preset="kohan">高配当（馬単+3連複+3連単）</button>';
@@ -371,11 +372,87 @@
         html += '<label><input type="checkbox" data-ticket-type="sanrenpuku"' + (selectedTicketTypes.sanrenpuku ? ' checked' : '') + '>3連複</label>';
         html += '<label><input type="checkbox" data-ticket-type="sanrentan"' + (selectedTicketTypes.sanrentan ? ' checked' : '') + '>3連単</label>';
         html += '</div>';
-        if (s.totalByType) {
+        var ticketTypes = ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'];
+        var ticketNameMap = { umaren: '馬連', wide: 'ワイド', umatan: '馬単', sanrenpuku: '3連複', sanrentan: '3連単' };
+        function rptHasSimStake(b) {
+          if (!b || !b.byType) return false;
+          for (var ri = 0; ri < ticketTypes.length; ri++) {
+            var vt = b.byType[ticketTypes[ri]];
+            if (vt && Number(vt.stake || 0) > 0) return true;
+          }
+          return false;
+        }
+        var simKeys = keys.filter(function (k) {
+          return rptHasSimStake(byRpt[k]);
+        });
+        if (simKeys.length) {
+          var grandStakeSel = 0;
+          var grandPayoutSel = 0;
+          simKeys.forEach(function (k) {
+            var b = byRpt[k] || {};
+            var stakeSel = 0;
+            var payoutSel = 0;
+            html += '<div class="rpt-sim-block" style="margin-top:14px">';
+            html +=
+              '<p style="font-weight:700;margin:0 0 6px;color:#334155;font-size:0.88rem">RPT ' +
+              esc(k) +
+              ' <span style="font-weight:500;color:#64748b;font-size:0.78rem">（買い+結果 ' +
+              esc(String(b.buyWithResult || 0)) +
+              '件）</span></p>';
+            html +=
+              '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>券種</th><th>投資(円)</th><th>払戻(円)</th><th>回収率</th></tr></thead><tbody>';
+            ticketTypes.forEach(function (t) {
+              var v =
+                b.byType && b.byType[t] ? b.byType[t] : { stake: 0, payout: 0 };
+              if (selectedTicketTypes[t]) {
+                stakeSel += Number(v.stake || 0);
+                payoutSel += Number(v.payout || 0);
+              }
+              var st = Number(v.stake || 0);
+              var py = Number(v.payout || 0);
+              var r = st > 0 ? Math.round((py / st) * 1000) / 10 : 0;
+              html +=
+                '<tr><td>' +
+                ticketNameMap[t] +
+                (selectedTicketTypes[t] ? '' : '（OFF）') +
+                '</td><td>' +
+                st.toLocaleString('ja-JP') +
+                '</td><td>' +
+                py.toLocaleString('ja-JP') +
+                '</td><td>' +
+                r.toFixed(1) +
+                '%</td></tr>';
+            });
+            var roiSel = stakeSel > 0 ? Math.round((payoutSel / stakeSel) * 1000) / 10 : 0;
+            html +=
+              '<tr><th>選択中 合計</th><th>' +
+              stakeSel.toLocaleString('ja-JP') +
+              '</th><th>' +
+              payoutSel.toLocaleString('ja-JP') +
+              '</th><th>' +
+              roiSel.toFixed(1) +
+              '%</th></tr>';
+            html += '</tbody></table></div></div>';
+            grandStakeSel += stakeSel;
+            grandPayoutSel += payoutSel;
+          });
+          var grandRoiSel = grandStakeSel > 0 ? Math.round((grandPayoutSel / grandStakeSel) * 1000) / 10 : 0;
+          html += '<div class="rpt-table-wrap" style="margin-top:16px">';
+          html +=
+            '<table class="rpt-stats"><tbody><tr style="background:#e2e8f0"><th scope="row">全RPT 選択中 合計</th><th>' +
+            grandStakeSel.toLocaleString('ja-JP') +
+            '</th><th>' +
+            grandPayoutSel.toLocaleString('ja-JP') +
+            '</th><th>' +
+            grandRoiSel.toFixed(1) +
+            '%</th></tr></tbody></table></div>';
+        } else if (s.totalByType) {
           var totalStakeSel = 0;
           var totalPayoutSel = 0;
-          var ticketTypes = ['umaren', 'wide', 'umatan', 'sanrenpuku', 'sanrentan'];
-          html += '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>券種</th><th>投資(円)</th><th>払戻(円)</th><th>回収率</th></tr></thead><tbody>';
+          html +=
+            '<p class="hint" style="margin-bottom:8px">RPT別の内訳がまだ無いため、全体のみ表示しています。</p>';
+          html +=
+            '<div class="rpt-table-wrap"><table class="rpt-stats"><thead><tr><th>券種</th><th>投資(円)</th><th>払戻(円)</th><th>回収率</th></tr></thead><tbody>';
           ticketTypes.forEach(function (t) {
             var v = s.totalByType[t] || { stake: 0, payout: 0 };
             if (selectedTicketTypes[t]) {
@@ -383,12 +460,30 @@
               totalPayoutSel += Number(v.payout || 0);
             }
             var r = v.stake > 0 ? Math.round((v.payout / v.stake) * 1000) / 10 : 0;
-            var nameMap = { umaren: '馬連', wide: 'ワイド', umatan: '馬単', sanrenpuku: '3連複', sanrentan: '3連単' };
-            html += '<tr><td>' + nameMap[t] + (selectedTicketTypes[t] ? '' : '（OFF）') + '</td><td>' + Number(v.stake || 0).toLocaleString('ja-JP') + '</td><td>' + Number(v.payout || 0).toLocaleString('ja-JP') + '</td><td>' + r.toFixed(1) + '%</td></tr>';
+            html +=
+              '<tr><td>' +
+              ticketNameMap[t] +
+              (selectedTicketTypes[t] ? '' : '（OFF）') +
+              '</td><td>' +
+              Number(v.stake || 0).toLocaleString('ja-JP') +
+              '</td><td>' +
+              Number(v.payout || 0).toLocaleString('ja-JP') +
+              '</td><td>' +
+              r.toFixed(1) +
+              '%</td></tr>';
           });
           var totalRoiSel = totalStakeSel > 0 ? Math.round((totalPayoutSel / totalStakeSel) * 1000) / 10 : 0;
-          html += '<tr><th>選択中 合計</th><th>' + totalStakeSel.toLocaleString('ja-JP') + '</th><th>' + totalPayoutSel.toLocaleString('ja-JP') + '</th><th>' + totalRoiSel.toFixed(1) + '%</th></tr>';
+          html +=
+            '<tr><th>選択中 合計</th><th>' +
+            totalStakeSel.toLocaleString('ja-JP') +
+            '</th><th>' +
+            totalPayoutSel.toLocaleString('ja-JP') +
+            '</th><th>' +
+            totalRoiSel.toFixed(1) +
+            '%</th></tr>';
           html += '</tbody></table></div>';
+        } else {
+          html += '<p class="hint">集計対象のデータがありません。</p>';
         }
         if (keys.length) {
           html += '<p style="font-size:0.82rem;font-weight:700;margin:12px 0 6px;color:#0f172a">RPTごとの買う/見送り推奨（暫定）</p>';
