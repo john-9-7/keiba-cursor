@@ -28,6 +28,7 @@ const {
   readAllResultsLatestByRaceId,
   getMergedRecent,
   computeStatsFromMerged,
+  computeDataGapsFromMerged,
 } = require('./lib/raceAccumulator');
 /** race-analyze 取得は蓄積ロジックと独立（lib/keibaAnalyzeFetch）。5xx 時はリトライ付き */
 const { fetchRaceAnalyzeHtml } = require('./lib/keibaAnalyzeFetch');
@@ -498,7 +499,8 @@ app.get('/api/accumulate/stats', (req, res) => {
     const raw = Math.min(Math.max(parseInt(req.query.limit, 10) || 300, 10), 2000);
     const merged = getMergedRecent(raw);
     const stats = computeStatsFromMerged(merged);
-    res.json({ ok: true, limitUsed: raw, stats });
+    const dataGaps = computeDataGapsFromMerged(merged);
+    res.json({ ok: true, limitUsed: raw, stats, dataGaps });
   } catch (err) {
     res.status(500).json({ ok: false, error: err.message || '取得に失敗しました。' });
   }
