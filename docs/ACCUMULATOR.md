@@ -40,7 +40,7 @@
 - `POST /api/accumulate/bulk-all-list` … レース一覧HTMLから **日付×会場のすべて** を順に蓄積（各会場の全レース）。`date` を省略すると一覧に出ている開催すべて。`date` を指定するとその日付の会場だけ。**処理が長い**ためホスティングの **HTTP タイムアウト**に注意
 - `POST /api/accumulate/save-race` … 1レースだけ `raceId` で取得して追記
 - `POST /api/accumulate/result` … `raceId` + 着順などを `results.jsonl` に追記（同一 `race_id` で複数行ある場合、突合では **recordedAt が最新**の行を使用）
-- `POST /api/accumulate/fetch-results` … 指定日の蓄積スナップショットについて、**未登録レース**の結果を **netkeiba** から取得し `results.jsonl` に追記。Body: `{ "date": "2026-03-15" }`。中央競馬（中山・中京・阪神など）のみ対応。同時取得数は `FETCH_RESULTS_CONCURRENCY`（既定2）で調整可。
+- `POST /api/accumulate/fetch-results` … 指定日の蓄積スナップショットについて、**未登録レース**の結果を **netkeiba** から取得し `results.jsonl` に追記。Body: `{ "date": "2026-03-15" }`。中央（JRA 10場：札幌・函館・福島・新潟・東京・中山・中京・京都・阪神・小倉）を対象。同時取得数は `FETCH_RESULTS_CONCURRENCY`（既定2）で調整可。
 - `POST /api/accumulate/backfill-payouts` … 指定日の既存結果のうち **払戻が空のレースだけ** を再取得して追記（バックフィル）。Body: `{ "date": "2026-03-15" }`。
 - `POST /api/accumulate/backfill-payouts-range` … 期間指定で払戻バックフィルを日次実行。Body: `{ "startDate": "2026-03-01", "endDate": "2026-03-24" }`（最大120日）。
 
